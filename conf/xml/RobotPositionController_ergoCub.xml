@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE robot PUBLIC "-//YARP//DTD yarprobotinterface 3.0//EN" "http://www.yarp.it/DTD/yarprobotinterfaceV3.0.dtd">
+<robot name="ergoCub-Retargeting" build=0 portprefix="">
+
+
+    <device type="human_state_nwc_yarp" name="RobotStateRemapper">
+       <param name="humanStateDataPort">/ergoCub/RobotStateServer/state:o</param>
+    </device>
+
+    <!-- uncomment if you want to use the RobotStateProvider data to control the robot position -->
+    <device type="robot_position_controller" name="RobotPositionController">
+        <param name="period">0.100</param>
+        <param name="controlMode">positionDirect</param>
+        <param name="refSpeed">15.0</param>
+        <param name="samplingTime">0.01</param>
+        <param name="smoothingTime">0.25</param>
+        <param name="initialSmoothingTime">2.5</param>
+        <param name="maxSmoothingCount">250</param>
+        <param name="controlBoardsList">(left_arm)</param>
+        <param name="remotePrefix">/ergocub</param>
+        <param name="localPrefix">/robotPositionController</param>
+        <param name="head">(neck_pitch neck_roll neck_yaw)</param>
+        <param name="torso">(torso_yaw torso_roll torso_pitch)</param>
+        <param name="left_arm">(l_shoulder_pitch l_shoulder_roll l_shoulder_yaw l_elbow l_wrist_roll l_wrist_pitch l_wrist_yaw)</param>
+        <param name="right_arm">(r_shoulder_pitch r_shoulder_roll r_shoulder_yaw r_elbow r_wrist_roll r_wrist_pitch r_wrist_yaw)</param>
+        <action phase="startup" level="5" type="attach">
+            <paramlist name="networks">
+                <elem name="RobotPositionController">RobotStateRemapper</elem>
+            </paramlist>
+        </action>
+        <action phase="shutdown" level="4" type="detach"/>
+    </device>
+
+</robot>
