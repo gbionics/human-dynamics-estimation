@@ -12,7 +12,7 @@
 
     <device type="iframetransform_to_iwear" name="IFrameTransformToIWear">
         <param name="wearableName">TransformServer</param>
-        <param extern-name="rootFrame" name="rootFrameID">world_grounded</param>
+        <param extern-name="rootFrame" name="rootFrameID">root_link_desired</param>
         <param name="wearableSensorType">PoseSensor</param>
         <param extern-name="frames" name="frameIDs">(root_link_desired
                                                      openxr_head
@@ -71,7 +71,7 @@
         <param name="dynamicalIKCorrectionGainsLinRot">(200.0 20.0)</param>
         <param name="dynamicalIKIntegralCorrectionGainsLinRot">(0.0 0.0)</param>
         <group name="WEARABLE_SENSOR_TARGETS">
-            <param name="target_Pelvis">(root_link, TransformServer::pose::root_link_desired, pose)</param>
+            <!-- <param name="target_Pelvis">(root_link, TransformServer::pose::root_link_desired, pose)</param> -->
             <param name="target_Chest">(chest, iFeelSuit::vLink::Node#6, gravity)</param>
             <param name="target_RightHand">(r_hand_palm, TransformServer::pose::right_glove, pose)</param>
             <param name="target_LeftHand">(l_hand_palm, TransformServer::pose::left_glove, pose)</param>
@@ -155,8 +155,8 @@
             <!--param name="custom_joints_velocity_limits_values">(10.0, 15.0)</param-->
             <param name="custom_joints_velocity_limits_values">()</param>
         <!-- **** base velocity limit: x, y, z, roll, pitch, yaw ****-->
-            <param name="base_velocity_limit_upper_buond">(0.0, 0.0,  0.4, 0.0, 0.0, 0.0)</param>
-            <param name="base_velocity_limit_lower_buond">(0.0, 0.0, -0.4, 0.0, 0.0, 0.0)</param>
+            <param name="base_velocity_limit_upper_buond">(0.0, 0.0,  0.0, 0.0, 0.0, 0.0)</param>
+            <param name="base_velocity_limit_lower_buond">(0.0, 0.0, -0.0, 0.0, 0.0, 0.0)</param>
         <!-- Custom joint Configuration constraints-->
         <!-- if the boudary value is inf, I will use -1000.0 rad, or +1000.0 rad-->
             <param name="custom_constraint_variables">(
