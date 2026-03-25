@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(HumanDynamicsEstimation
         LANGUAGES CXX
-        VERSION 5.0.0)
+        VERSION 5.0.1)
 
 # =====================
 # PROJECT CONFIGURATION
