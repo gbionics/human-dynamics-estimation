@@ -420,15 +420,21 @@ int main(int argc, char* argv[])
     }
 
     double targetsFrameScalingFactor = 1.0;
+    double targetsForceScalingFactor = 1.0;
     if (visualizeTargets)
     {
         if ( !(rf.check("targetsFrameScalingFactor") && rf.find("targetsFrameScalingFactor").isFloat64()) )
         {
             yWarning() << LogPrefix << "'targetsFrameScalingFactor' option not found or not valid. Using default scale factor = 1.0";
         }
+        else if ( !(rf.check("targetsForceScalingFactor") && rf.find("targetsForceScalingFactor").isFloat64()) )
+        {
+            yWarning() << LogPrefix << "'targetsForceScalingFactor' option not found or not valid. Using default scale factor = 0.1";
+        }
         else
         {
             targetsFrameScalingFactor = rf.find("targetsFrameScalingFactor").asFloat64();
+            targetsForceScalingFactor = rf.find("targetsForceScalingFactor").asFloat64();
         }
     }
 
@@ -704,6 +710,8 @@ int main(int argc, char* argv[])
     iDynTree::Position basePositionOld = fixedCameraTarget;
     iDynTree::Transform linkTransform;
     iDynTree::Vector3 gravityVector;
+    iDynTree::Vector3 contactForceVector;
+    bool contactActive;
     iDynTree::Direction force;
 
     iDynTree::Transform wHb = iDynTree::Transform::Identity();
@@ -778,7 +786,12 @@ int main(int argc, char* argv[])
                 iDynTree::toEigen(gravityVector) = targetsFrameScalingFactor * iDynTree::toEigen(linkTransform.getRotation()).row(2);
                 viz.vectors().addVector(linkTransform.getPosition(), gravityVector );
             }
-            
+if ( targetEntity.second.get()->targetType == hde::KinematicTargetType::floorContact )
+            {
+                linkTransform = viz.modelViz("human").getWorldLinkTransform(targetEntity.second.get()->modelLinkName);
+                iDynTree::toEigen(contactForceVector) = targetsForceScalingFactor *  iDynTree::toEigen(targetEntity.second.get()->contactForce);
+                viz.vectors().addVector(linkTransform.getPosition(), contactForceVector);
+            }            
         }
     }
 
@@ -906,12 +919,21 @@ int main(int argc, char* argv[])
                     vectorsIterator++;
                     break;
                 case hde::KinematicTargetType::floorContact:
-                    linkTransform = iDynTree::Transform(targetEntity.second.get()->getCalibratedRotation(), iDynTree::Position(targetEntity.second.get()->getCalibratedPosition()));
-                    linkTransform.setPosition(iDynTree::Position(linkTransform.getPosition().getVal(0), linkTransform.getPosition().getVal(1), linkTransform.getPosition().getVal(2)));
-
-        
+                    linkTransform = viz.modelViz("human").getWorldLinkTransform(targetEntity.second.get()->modelLinkName);
                     viz.frames().updateFrame(framesIterator, linkTransform);
                     framesIterator++;
+                    iDynTree::toEigen(contactForceVector) = targetsForceScalingFactor * iDynTree::toEigen(targetEntity.second.get()->contactForce);
+                    viz.vectors().updateVector(vectorsIterator, linkTransform.getPosition(), contactForceVector);
+                    contactActive = targetEntity.second.get()->contactActive;
+                    if (contactActive)
+                    {
+                        viz.vectors().setVectorColor(vectorsIterator, iDynTree::ColorViz(1.0, 0.0, 0.0, 1.0));
+                    }
+                    else
+                    {
+                        viz.vectors().setVectorColor(vectorsIterator, iDynTree::ColorViz(0.0, 1.0, 0.0, 1.0));
+                    }
+                    vectorsIterator++;
                     break;
                 default:
                     linkTransform = viz.modelViz("human").getWorldLinkTransform(targetEntity.second.get()->modelLinkName);

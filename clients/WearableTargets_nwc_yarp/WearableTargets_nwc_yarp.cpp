@@ -160,23 +160,26 @@ void WearableTargets_nwc_yarp::onRead(trintrin::msgs::WearableTargets& wearableT
 {
     if(!pImpl->terminationCall) {
 
-        for (auto wearableTarget : wearableTargetsData.targets)
+        for (auto& [wearableTargetName, wearableTarget] : wearableTargetsData.targets)
         {
-            if (pImpl->wearableTargets.find(wearableTarget.first) == pImpl->wearableTargets.end())
+            if (pImpl->wearableTargets.find(wearableTargetName) == pImpl->wearableTargets.end())
             {
-                pImpl->wearableTargets[wearableTarget.first] = std::make_shared<hde::WearableSensorTarget>(wearableTarget.second.wearableSensorName,
-                                                                                                           wearableTarget.second.linkName,
-                                                                                                           mapKinematicTargetType.at(wearableTarget.second.type));
+                pImpl->wearableTargets[wearableTargetName] = std::make_shared<hde::WearableSensorTarget>(wearableTarget.wearableSensorName,
+                                                                                                           wearableTarget.linkName,
+                                                                                                           mapKinematicTargetType.at(wearableTarget.type));
             }
 
             // TODO: this can be done more efficiently considering different target type have incomplete information
-            pImpl->wearableTargets[wearableTarget.first].get()->position = generateVector3FromMsg(wearableTarget.second.position);
-            pImpl->wearableTargets[wearableTarget.first].get()->rotation = generateRotationFromMsg(wearableTarget.second.orientation);
-            pImpl->wearableTargets[wearableTarget.first].get()->linearVelocity = generateVector3FromMsg(wearableTarget.second.linearVelocity);
-            pImpl->wearableTargets[wearableTarget.first].get()->angularVelocity = generateVector3FromMsg(wearableTarget.second.angularVelocity);
-            pImpl->wearableTargets[wearableTarget.first].get()->calibrationWorldToMeasurementWorld = generateTransformFromMsg(wearableTarget.second.calibrationWorldToMeasurementWorld);
-            pImpl->wearableTargets[wearableTarget.first].get()->calibrationMeasurementToLink = generateTransformFromMsg(wearableTarget.second.calibrationMeasurementToLink);
-            pImpl->wearableTargets[wearableTarget.first].get()->positionScaleFactor = generateVector3FromMsg(wearableTarget.second.positionScaleFactor);
+            pImpl->wearableTargets[wearableTargetName].get()->position = generateVector3FromMsg(wearableTarget.position);
+            pImpl->wearableTargets[wearableTargetName].get()->rotation = generateRotationFromMsg(wearableTarget.orientation);
+            pImpl->wearableTargets[wearableTargetName].get()->linearVelocity = generateVector3FromMsg(wearableTarget.linearVelocity);
+            pImpl->wearableTargets[wearableTargetName].get()->angularVelocity = generateVector3FromMsg(wearableTarget.angularVelocity);
+            pImpl->wearableTargets[wearableTargetName].get()->calibrationWorldToMeasurementWorld = generateTransformFromMsg(wearableTarget.calibrationWorldToMeasurementWorld);
+            pImpl->wearableTargets[wearableTargetName].get()->calibrationMeasurementToLink = generateTransformFromMsg(wearableTarget.calibrationMeasurementToLink);
+            pImpl->wearableTargets[wearableTargetName].get()->positionScaleFactor = generateVector3FromMsg(wearableTarget.positionScaleFactor);
+            pImpl->wearableTargets[wearableTargetName].get()->contactActive = wearableTarget.contactActive;
+            pImpl->wearableTargets[wearableTargetName].get()->contactThreshold = wearableTarget.contactThreshold;
+            pImpl->wearableTargets[wearableTargetName].get()->contactForce = generateVector3FromMsg(wearableTarget.contactForce);
         }
     }
 }

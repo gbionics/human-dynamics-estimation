@@ -834,18 +834,18 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
 
     for (size_t i = 1; i < contactThresholdGroup.size(); ++i) {
         hde::TargetName targetName = contactThresholdGroup.get(i).asList()->get(0).asString();
-        double contactTreshold =
+        double contactThreshold =
             contactThresholdGroup.get(i).asList()->find(targetName).asFloat64();
 
         if (pImpl->wearableTargets.find(targetName) == pImpl->wearableTargets.end()) {
-            yError() << LogPrefix << "Contact treshold for not existing target [" << targetName
+            yError() << LogPrefix << "Contact threshold for not existing target [" << targetName
                      << "]";
             return false;
         }
 
-        pImpl->wearableTargets[targetName].get()->contactTreshold = contactTreshold;
-        yInfo() << LogPrefix << "Adding contact treshold for " << targetName << "==>"
-                << contactTreshold;
+        pImpl->wearableTargets[targetName].get()->contactThreshold = contactThreshold;
+        yInfo() << LogPrefix << "Adding contact threshold for " << targetName << "==>"
+                << contactThreshold;
     }
 
     // ==========================================
@@ -1977,6 +1977,7 @@ bool HumanStateProvider::impl::updateWearableTargets()
                 }
 
                 wearableTargetEntry.second->contactActive = contactActive;
+                wearableTargetEntry.second->contactForce = force;
 
                 break;
             }

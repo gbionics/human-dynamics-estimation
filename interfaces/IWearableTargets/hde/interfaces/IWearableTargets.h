@@ -62,7 +62,8 @@ namespace hde {
         // target-specific configurations
         // floor contact
         bool contactActive;
-        double contactTreshold = 0; // [N]
+        double contactThreshold = 0; // [N]
+        iDynTree::Vector3 contactForce; // [N]
 
         mutable std::mutex mutex;
 

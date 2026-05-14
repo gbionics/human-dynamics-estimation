@@ -146,7 +146,11 @@ void WearableTargets_nws_yarp::run()
                                                    generateMsgVectorXYZ(wearableTargetEntry.second.get()->angularVelocity),
                                                    generateMsgTransform(wearableTargetEntry.second.get()->calibrationWorldToMeasurementWorld),
                                                    generateMsgTransform(wearableTargetEntry.second.get()->calibrationMeasurementToLink),
-                                                   generateMsgVectorXYZ(wearableTargetEntry.second.get()->positionScaleFactor)};
+                                                   generateMsgVectorXYZ(wearableTargetEntry.second.get()->positionScaleFactor),
+                                                   wearableTargetEntry.second.get()->contactActive,
+                                                   wearableTargetEntry.second.get()->contactThreshold,
+                                                   generateMsgVectorXYZ(wearableTargetEntry.second.get()->contactForce)};
+                                                   
     }
 
     // Stream the data though the port
