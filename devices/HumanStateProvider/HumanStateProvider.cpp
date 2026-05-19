@@ -99,6 +99,7 @@ enum SolverIK
 enum rpcCommand
 {
     empty,
+    nPose,
     calibrateAll,
     calibrateAllWithWorld,
     calibrateAllWorldYaw,
@@ -237,6 +238,7 @@ public:
     // flags
     bool useDirectBaseMeasurement;
     bool useFixedBase;
+    bool pendingCalibrationPoseResetOnce{false};
 
     iDynTree::InverseKinematics globalIK;
     hde::algorithms::InverseVelocityKinematics
@@ -330,6 +332,8 @@ public:
                     "for all the targets assuming the <refTarget> to be in the world origin \n");
                 response.addString(
                     "Enter <calibrateAllWorldYaw> to remove the yaw offset for all the data \n");
+                response.addString(
+                    "Enter <NPose [refTarget]> to run the N-Pose calibration and reset the state of all the targets.\n");
                 response.addString("Enter <setRotationOffset <targetName> <r p y [deg]>> to apply "
                                    "a secondary calibration for the given target using the given "
                                    "rotation offset (defined using rpy)\n");
@@ -361,6 +365,13 @@ public:
                 response.addString("Entered command <calibrateAll> is correct, trying to set "
                                    "offset calibration for all the targets");
                 this->cmdStatus = rpcCommand::calibrateAll;
+            }
+            else if (command.get(0).asString() == "NPose") {
+                this->parentLinkName = "";
+                this->refLinkName = command.get(1).isNull() ? "target_l_foot" : command.get(1).asString();
+                response.addString("Entered command <NPose> is correct, trying to execute the "
+                                   "N-Pose calibration. Ref target: " + this->refLinkName);
+                this->cmdStatus = rpcCommand::nPose;
             }
             else if (command.get(0).asString() == "calibrateAllWithWorld") {
                 this->parentLinkName = "";
@@ -1606,7 +1617,10 @@ void HumanStateProvider::impl::computeSecondaryCalibrationRotationsForChain(
 {
     // initialize vectors
     iDynTree::VectorDynSize jointPos(jointConfigurationSolution);
-    jointPos.zero();
+    
+    for (auto const& jointZeroIdx : jointZeroIndices) {
+    jointPos.setVal(jointZeroIdx, jointCalibrationSolution.getVal(jointZeroIdx));
+    }
     iDynTree::VectorDynSize jointVel(jointVelocitiesSolution);
     jointVel.zero();
     iDynTree::Twist baseVel;
@@ -1711,6 +1725,76 @@ bool HumanStateProvider::impl::applyRpcCommand()
             // Compute secondary calibration for the selected links setting to zero the given joints
             computeSecondaryCalibrationRotationsForChain(
                 jointZeroIndices, iDynTree::Transform::Identity(), linkToCalibrateIndices, "");
+            break;
+        }
+
+        case rpcCommand::nPose: {
+            linkToCalibrateIndices.resize(kinDynComputations->getNrOfLinks());
+            std::iota(linkToCalibrateIndices.begin(), linkToCalibrateIndices.end(), 0);
+
+            jointZeroIndices.resize(kinDynComputations->getNrOfDegreesOfFreedom());
+            std::iota(jointZeroIndices.begin(), jointZeroIndices.end(), 0);
+
+            iDynTree::VectorDynSize jointPos(jointConfigurationSolution);
+            iDynTree::VectorDynSize jointVel(jointVelocitiesSolution);
+            jointVel.zero();
+            iDynTree::Twist baseVel;
+            baseVel.zero();
+
+            for (auto const& jointZeroIdx : jointZeroIndices) {
+                jointPos.setVal(jointZeroIdx, jointCalibrationSolution.getVal(jointZeroIdx));
+            }
+
+            kinDynComputations->setRobotState(
+                iDynTree::Transform::Identity(), jointPos, baseVel, jointVel, worldGravity);
+
+            for (auto wearableTargetEntry : wearableTargets) {
+                hde::TargetName targetName = wearableTargetEntry.first;
+                ModelLinkName linkName = wearableTargetEntry.second->modelLinkName;
+                iDynTree::LinkIndex linkIndex = kinDynComputations->model().getLinkIndex(linkName);
+
+                if (std::find(
+                        linkToCalibrateIndices.begin(), linkToCalibrateIndices.end(), linkIndex)
+                    != linkToCalibrateIndices.end()) {
+                    wearableTargetEntry.second->clearWorldCalibrationMatrix();
+
+                    iDynTree::Vector3 rpyOffsetTransform =
+                        iDynTree::Rotation(
+                            kinDynComputations->getWorldTransform(linkName).getRotation()
+                            * wearableTargetEntry.second->getCalibratedRotation().inverse())
+                            .asRPY();
+                    wearableTargetEntry.second->calibrationWorldToMeasurementWorld.setRotation(
+                        iDynTree::Rotation::RotZ(rpyOffsetTransform.getVal(2)));
+                }
+            }
+
+            hde::TargetName refTargetForCalibrationName = commandPro->refLinkName;
+            if (wearableTargets.find(refTargetForCalibrationName) == wearableTargets.end()) {
+                yWarning() << LogPrefix << "Target " << refTargetForCalibrationName
+                           << " choosen as base for secondaty calibration is not valid";
+                return false;
+            }
+
+            linkToCalibrateIndices.resize(kinDynComputations->getNrOfLinks());
+            std::iota(linkToCalibrateIndices.begin(), linkToCalibrateIndices.end(), 0);
+
+            jointZeroIndices.resize(kinDynComputations->getNrOfDegreesOfFreedom());
+            std::iota(jointZeroIndices.begin(), jointZeroIndices.end(), 0);
+
+            computeSecondaryCalibrationRotationsForChain(jointZeroIndices,
+                                                         iDynTree::Transform::Identity(),
+                                                         linkToCalibrateIndices,
+                                                         refTargetForCalibrationName);
+            pendingCalibrationPoseResetOnce = true;
+
+            // Release floor-contact constraints to avoid locking IK after reset
+            for (auto& wearableTargetEntry : wearableTargets) {
+                if (wearableTargetEntry.second->targetType
+                    == hde::KinematicTargetType::floorContact) {
+                    wearableTargetEntry.second->contactActive = false;
+                }
+            }
+
             break;
         }
         case rpcCommand::calibrateAllWorldYaw: {
@@ -2369,6 +2453,22 @@ bool HumanStateProvider::impl::solveDynamicalInverseKinematics()
         dt = yarp::os::Time::now() - lastTime;
     };
     lastTime = yarp::os::Time::now();
+
+    if (pendingCalibrationPoseResetOnce) {
+        iDynTree::Transform calibrationBase = iDynTree::Transform::Identity();
+        if (!dynamicalInverseKinematics.setConfiguration(calibrationBase,
+                                                         jointCalibrationSolution)) {
+            yWarning() << LogPrefix
+                       << "Failed to apply one-shot calibration reset after NPose";
+        }
+        else {
+            baseTransformSolution = calibrationBase;
+            baseVelocitySolution.zero();
+            jointConfigurationSolution = jointCalibrationSolution;
+            jointVelocitiesSolution.zero();
+        }
+        pendingCalibrationPoseResetOnce = false;
+    }
 
     for (auto wearableTargetEntry : wearableTargets) {
         hde::KinematicTargetType targetType = wearableTargetEntry.second->targetType;
