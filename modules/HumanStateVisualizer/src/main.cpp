@@ -427,14 +427,19 @@ int main(int argc, char* argv[])
         {
             yWarning() << LogPrefix << "'targetsFrameScalingFactor' option not found or not valid. Using default scale factor = 1.0";
         }
-        else if ( !(rf.check("targetsForceScalingFactor") && rf.find("targetsForceScalingFactor").isFloat64()) )
+        else {
+            targetsFrameScalingFactor = rf.find("targetsFrameScalingFactor").asFloat64();
+            yInfo() << LogPrefix << "'targetsFrameScalingFactor' option found. Using scale factor =" << targetsFrameScalingFactor;
+        }
+        
+        if ( !(rf.check("targetsForceScalingFactor") && rf.find("targetsForceScalingFactor").isFloat64()) )
         {
-            yWarning() << LogPrefix << "'targetsForceScalingFactor' option not found or not valid. Using default scale factor = 0.1";
+            yWarning() << LogPrefix << "'targetsForceScalingFactor' option not found or not valid. Using default scale factor = 1.0";
         }
         else
         {
-            targetsFrameScalingFactor = rf.find("targetsFrameScalingFactor").asFloat64();
             targetsForceScalingFactor = rf.find("targetsForceScalingFactor").asFloat64();
+            yInfo() << LogPrefix << "'targetsForceScalingFactor' option found. Using scale factor =" << targetsForceScalingFactor;
         }
     }
 
