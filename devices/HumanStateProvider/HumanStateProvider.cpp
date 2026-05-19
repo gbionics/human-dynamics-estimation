@@ -1729,6 +1729,13 @@ bool HumanStateProvider::impl::applyRpcCommand()
         }
 
         case rpcCommand::nPose: {
+            hde::TargetName refTargetForCalibrationName = commandPro->refLinkName;
+            if (wearableTargets.find(refTargetForCalibrationName) == wearableTargets.end()) {
+                yWarning() << LogPrefix << "Target " << refTargetForCalibrationName
+                           << " choosen as base for secondaty calibration is not valid";
+                return false;
+            }
+
             linkToCalibrateIndices.resize(kinDynComputations->getNrOfLinks());
             std::iota(linkToCalibrateIndices.begin(), linkToCalibrateIndices.end(), 0);
 
@@ -1768,12 +1775,6 @@ bool HumanStateProvider::impl::applyRpcCommand()
                 }
             }
 
-            hde::TargetName refTargetForCalibrationName = commandPro->refLinkName;
-            if (wearableTargets.find(refTargetForCalibrationName) == wearableTargets.end()) {
-                yWarning() << LogPrefix << "Target " << refTargetForCalibrationName
-                           << " choosen as base for secondaty calibration is not valid";
-                return false;
-            }
 
             linkToCalibrateIndices.resize(kinDynComputations->getNrOfLinks());
             std::iota(linkToCalibrateIndices.begin(), linkToCalibrateIndices.end(), 0);
