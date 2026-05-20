@@ -194,6 +194,8 @@ public:
     double posTargetWeight;
     double rotTargetWeight;
     double linVelTargetWeight;
+    double floorContactActiveWeight;
+    double floorContactInactiveWeight;
     double angVelTargetWeight;
     double costRegularization;
 
@@ -936,6 +938,16 @@ bool HumanStateProvider::open(yarp::os::Searchable& config)
         pImpl->useDirectBaseMeasurement = config.find("useDirectBaseMeasurement").asBool();
         pImpl->linVelTargetWeight = config.find("linVelTargetWeight").asFloat64();
         pImpl->angVelTargetWeight = config.find("angVelTargetWeight").asFloat64();
+        pImpl->floorContactActiveWeight = 1.0;
+        pImpl->floorContactInactiveWeight = 0.0;
+        if (config.check("floorContactActiveWeight")
+            && config.find("floorContactActiveWeight").isFloat64()) {
+            pImpl->floorContactActiveWeight = config.find("floorContactActiveWeight").asFloat64();
+        }
+        if (config.check("floorContactInactiveWeight")
+            && config.find("floorContactInactiveWeight").isFloat64()) {
+            pImpl->floorContactInactiveWeight = config.find("floorContactInactiveWeight").asFloat64();
+        }
         pImpl->costRegularization = config.find("costRegularization").asFloat64();
     }
 
@@ -2032,36 +2044,30 @@ bool HumanStateProvider::impl::updateWearableTargets()
                     continue;
                 }
 
-                // If z force is greater then treshold add the contact constraint
-                bool contactActive = force.at(2) > wearableTargetEntry.second->contactTreshold;
-                // if swtiching to contact, use new position for contact
-                if (!wearableTargetEntry.second->contactActive && contactActive) {
+                bool newContactActive = force.at(2) > wearableTargetEntry.second->contactThreshold;
+    
+
+                // Transition OFF → ON: freeze setpoint from kinematic model 
+                if (!wearableTargetEntry.second->contactActive && newContactActive) {
                     kinDynComputations->setRobotState(baseTransformSolution,
                                                       jointConfigurationSolution,
                                                       baseVelocitySolution,
                                                       jointVelocitiesSolution,
                                                       worldGravity);
-                    auto contactPosition =
-                        kinDynComputations
-                            ->getWorldTransform(wearableTargetEntry.second->modelLinkName)
+                    wearableTargetEntry.second->frozenContactPosition =
+                        kinDynComputations->getWorldTransform(wearableTargetEntry.second->modelLinkName)
                             .getPosition();
-                    contactPosition.setVal(2, 0);
-                    // recompute the sensor measurement to link offset (sensor_p_link) such that the
-                    // target link position is contactPosition: target_position = world_p_measWorld
-                    // + world_R_measWorld * (measWorld_p_sensor + measWorld_R_sensor sensor_p_link)
-                    wearableTargetEntry.second->calibrationMeasurementToLink.setPosition(
-                        ((contactPosition
-                          - wearableTargetEntry.second->calibrationWorldToMeasurementWorld
-                                .getPosition())
-                             .changeCoordinateFrame(
-                                 wearableTargetEntry.second->calibrationWorldToMeasurementWorld
-                                     .getRotation()
-                                     .inverse())
-                         - iDynTree::Position(wearableTargetEntry.second->position))
-                            .changeCoordinateFrame(wearableTargetEntry.second->rotation.inverse()));
+                    wearableTargetEntry.second->frozenContactPosition.setVal(2, 0.0);
+                    yInfo() << LogPrefix << "Floor contact ON for " << targetName
+                            << " frozen at ("
+                            << wearableTargetEntry.second->frozenContactPosition.getVal(0) << ", "
+                            << wearableTargetEntry.second->frozenContactPosition.getVal(1) << ", "
+                            << wearableTargetEntry.second->frozenContactPosition.getVal(2) << ")";
+                } else if (wearableTargetEntry.second->contactActive && !newContactActive) {
+                    yInfo() << LogPrefix << "Floor contact OFF for " << targetName;
                 }
 
-                wearableTargetEntry.second->contactActive = contactActive;
+                wearableTargetEntry.second->contactActive = newContactActive;
                 wearableTargetEntry.second->contactForce = force;
 
                 break;
@@ -2548,19 +2554,33 @@ bool HumanStateProvider::impl::solveDynamicalInverseKinematics()
                 break;
             }
             case hde::KinematicTargetType::floorContact: {
-                if (!dynamicalInverseKinematics.updateTargetPositionAndVelocity(
-                        linkName,
-                        wearableTargetEntry.second->getCalibratedPosition(),
-                        wearableTargetEntry.second->getCalibratedLinearVelocity())
-                    || !dynamicalInverseKinematics.updatePositionTargetAxis(
-                        linkName,
-                        {wearableTargetEntry.second->contactActive,
-                         wearableTargetEntry.second->contactActive,
-                         wearableTargetEntry.second->contactActive})) {
-
-                    yError() << LogPrefix << "Failed to update position and velocity target for "
+                double floorContactWeight = wearableTargetEntry.second->contactActive
+                                                ? floorContactActiveWeight
+                                                : floorContactInactiveWeight;
+                if (!dynamicalInverseKinematics.updateTargetWeights(linkName,
+                                                                    floorContactWeight,
+                                                                    angVelTargetWeight)) {
+                    yError() << LogPrefix << "Failed to update floorContact weight for "
                              << targetName;
                     return false;
+                }
+
+                if (wearableTargetEntry.second->contactActive) {
+                    if (!dynamicalInverseKinematics.updateTargetPosition(
+                        linkName,
+                            wearableTargetEntry.second->frozenContactPosition)
+                    || !dynamicalInverseKinematics.updatePositionTargetAxis(
+                            linkName, {true, true, true})) {
+                        yError() << LogPrefix << "Failed to update floorContact for " << targetName;
+                    return false;
+                    }
+                } else {
+                    // Not in contact: disable the task axes
+                    if (!dynamicalInverseKinematics.updatePositionTargetAxis(
+                            linkName, {false, false, false})) {
+                        yError() << LogPrefix << "Failed to disable floorContact for " << targetName;
+                        return false;
+                    }
                 }
                 break;
             }
