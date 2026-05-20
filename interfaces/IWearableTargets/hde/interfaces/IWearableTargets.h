@@ -64,6 +64,7 @@ namespace hde {
         bool contactActive;
         double contactThreshold = 0; // [N]
         iDynTree::Vector3 contactForce; // [N]
+        iDynTree::Vector3 frozenContactPosition; // Position frozen from kinematic model at touchdown
 
         mutable std::mutex mutex;
 
