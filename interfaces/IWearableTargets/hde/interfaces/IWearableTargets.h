@@ -40,13 +40,13 @@ namespace hde {
         hde::KinematicTargetType targetType;
 
         iDynTree::Vector3 position;
-        iDynTree::Rotation rotation;
+        iDynTree::Rotation rotation = iDynTree::Rotation::Identity();
         iDynTree::Vector3 linearVelocity;
         iDynTree::Vector3 angularVelocity;
 
-        iDynTree::Transform calibrationWorldToMeasurementWorld;
-        iDynTree::Transform calibrationMeasurementToLink;
-        iDynTree::Transform calibrationMeasurementToLinkInitial;
+        iDynTree::Transform calibrationWorldToMeasurementWorld = iDynTree::Transform::Identity();
+        iDynTree::Transform calibrationMeasurementToLink = iDynTree::Transform::Identity();
+        iDynTree::Transform calibrationMeasurementToLinkInitial = iDynTree::Transform::Identity();
         iDynTree::Vector3 positionScaleFactor;
 
         // buffer variables
@@ -56,12 +56,12 @@ namespace hde {
         iDynTree::Vector3 linearVelocityInWorld;
         iDynTree::Vector3 linearVelocityInMeasurementWorld;
         iDynTree::Vector3 linearVelocityScaled;
-        iDynTree::Twist twistMeasured;
-        iDynTree::Transform mixedTransform;
+        iDynTree::Twist twistMeasured = iDynTree::Twist::Zero();
+        iDynTree::Transform mixedTransform = iDynTree::Transform::Identity();
 
         // target-specific configurations
         // floor contact
-        bool contactActive;
+        bool contactActive = false;
         double contactTreshold = 0; // [N]
 
         mutable std::mutex mutex;
@@ -82,6 +82,12 @@ namespace hde {
             positionScaleFactor(0) = 1;
             positionScaleFactor(1) = 1;
             positionScaleFactor(2) = 1;
+            positionInWorld.zero();
+            positionInMeasurementWorld.zero();
+            positionScaled.zero();
+            linearVelocityInWorld.zero();
+            linearVelocityInMeasurementWorld.zero();
+            linearVelocityScaled.zero();
 
             clearCalibrationMatrices();
         };
