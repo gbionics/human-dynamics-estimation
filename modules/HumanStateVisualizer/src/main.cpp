@@ -593,16 +593,16 @@ int main(int argc, char* argv[])
             // check if target exists
             if (!target)
             {
-                yError() << LogPrefix << "target [ " << visualizedTargetFrame << " ] not found in iWearableTargets." ;
-                return EXIT_FAILURE;
+                yWarning() << LogPrefix << "target [ " << visualizedTargetFrame << " ] not found in iWearableTargets. Skipping." ;
+                continue;
             }
 
             // check if frame exists
             auto frameIndex = model.getLinkIndex(target.get()->modelLinkName);
             if (frameIndex == iDynTree::FRAME_INVALID_INDEX)
             {
-                yError() << LogPrefix << "target link [ " << target.get()->modelLinkName << " ] not found in the visualized model";
-                return EXIT_FAILURE;
+                yWarning() << LogPrefix << "target link [ " << target.get()->modelLinkName << " ] not found in the visualized model. Skipping.";
+                continue;
             }
 
             // add the target to the vector
