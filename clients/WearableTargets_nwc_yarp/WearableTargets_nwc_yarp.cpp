@@ -13,6 +13,7 @@
 
 const std::string ClientName = "WearableTargets_nwc_yarp";
 const std::string LogPrefix = ClientName + " :";
+constexpr double LOG_PORT_DISCONNECTED_INTERVAL_S = 5.0;
 
 using namespace hde::devices;
 
@@ -62,6 +63,7 @@ public:
     yarp::os::Network network;
     yarp::os::BufferedPort<trintrin::msgs::WearableTargets> inputPort;
     bool terminationCall = false;
+    std::string wearableTargetsDataPortName;
 
     mutable std::recursive_mutex mutex;
 
@@ -96,7 +98,7 @@ bool WearableTargets_nwc_yarp::open(yarp::os::Searchable& config)
     // PARSE THE CONFIGURATION OPTIONS
     // ===============================
 
-    std::string wearableTargetsDataPortName = config.find("wearableTargetsDataPort").asString();
+    pImpl->wearableTargetsDataPortName = config.find("wearableTargetsDataPort").asString();
 
     // Initialize the network
     // TODO: is this required in every DeviceDriver?
@@ -113,7 +115,7 @@ bool WearableTargets_nwc_yarp::open(yarp::os::Searchable& config)
 
     pImpl->inputPort.useCallback(*this);
     if (!pImpl->inputPort.open("...")) {
-        yError() << LogPrefix << "Failed to open port" << wearableTargetsDataPortName;
+        yError() << LogPrefix << "Failed to open port" << pImpl->wearableTargetsDataPortName;
         return false;
     }
 
@@ -123,9 +125,9 @@ bool WearableTargets_nwc_yarp::open(yarp::os::Searchable& config)
     yDebug() << LogPrefix << "Opening input ports";
 
 
-    if (!yarp::os::Network::connect(wearableTargetsDataPortName,
+    if (!yarp::os::Network::connect(pImpl->wearableTargetsDataPortName,
                                     pImpl->inputPort.getName())) {
-        yError() << LogPrefix << "Failed to connect " << wearableTargetsDataPortName
+        yError() << LogPrefix << "Failed to connect " << pImpl->wearableTargetsDataPortName
                  << " with " << pImpl->inputPort.getName();
         return false;
     }
@@ -153,7 +155,18 @@ bool WearableTargets_nwc_yarp::close()
 
 void WearableTargets_nwc_yarp::run()
 {
-    return;
+    if (pImpl->terminationCall) {
+        return;
+    }
+
+    if (pImpl->inputPort.getInputCount() == 0) {
+        yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
+            << LogPrefix << "No connection to" << pImpl->wearableTargetsDataPortName
+            << "- attempting to reconnect";
+        if (yarp::os::Network::exists(pImpl->wearableTargetsDataPortName)) {
+            yarp::os::Network::connect(pImpl->wearableTargetsDataPortName, pImpl->inputPort.getName());
+        }
+    }
 }
 
 void WearableTargets_nwc_yarp::onRead(trintrin::msgs::WearableTargets& wearableTargetsData)
