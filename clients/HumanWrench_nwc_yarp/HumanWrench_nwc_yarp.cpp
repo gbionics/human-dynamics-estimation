@@ -13,6 +13,7 @@
 
 const std::string ClientName = "HumanWrench_nwc_yarp";
 const std::string LogPrefix = ClientName + " :";
+constexpr double LOG_PORT_DISCONNECTED_INTERVAL_S = 5.0;
 
 using namespace hde::devices;
 
@@ -27,6 +28,7 @@ public:
     yarp::os::Network network;
     yarp::os::BufferedPort<trintrin::msgs::HumanWrench> inputPort;
     bool terminationCall = false;
+    std::string humanWrenchDataPortName;
 
     // Buffer HumanWrench variables
     std::vector<std::string> wrenchSourceNames;
@@ -62,7 +64,7 @@ bool HumanWrench_nwc_yarp::open(yarp::os::Searchable& config)
     // PARSE THE CONFIGURATION OPTIONS
     // ===============================
 
-    std::string humanWrenchDataPortName = config.find("humanWrenchDataPort").asString();
+    pImpl->humanWrenchDataPortName = config.find("humanWrenchDataPort").asString();
 
     // Initialize the network
     // TODO: is this required in every DeviceDriver?
@@ -79,7 +81,7 @@ bool HumanWrench_nwc_yarp::open(yarp::os::Searchable& config)
 
     pImpl->inputPort.useCallback(*this);
     if (!pImpl->inputPort.open("...")) {
-        yError() << LogPrefix << "Failed to open port" << humanWrenchDataPortName;
+        yError() << LogPrefix << "Failed to open port" << pImpl->humanWrenchDataPortName;
         return false;
     }
 
@@ -89,9 +91,9 @@ bool HumanWrench_nwc_yarp::open(yarp::os::Searchable& config)
     yDebug() << LogPrefix << "Opening input ports";
 
 
-    if (!yarp::os::Network::connect(humanWrenchDataPortName,
+    if (!yarp::os::Network::connect(pImpl->humanWrenchDataPortName,
                                     pImpl->inputPort.getName())) {
-        yError() << LogPrefix << "Failed to connect " << humanWrenchDataPortName
+        yError() << LogPrefix << "Failed to connect " << pImpl->humanWrenchDataPortName
                  << " with " << pImpl->inputPort.getName();
         return false;
     }
@@ -119,7 +121,18 @@ bool HumanWrench_nwc_yarp::close()
 
 void HumanWrench_nwc_yarp::run()
 {
-    return;
+    if (pImpl->terminationCall) {
+        return;
+    }
+
+    if (pImpl->inputPort.getInputCount() == 0) {
+        yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
+            << LogPrefix << "No connection to" << pImpl->humanWrenchDataPortName
+            << "- attempting to reconnect";
+        if (yarp::os::Network::exists(pImpl->humanWrenchDataPortName)) {
+            yarp::os::Network::connect(pImpl->humanWrenchDataPortName, pImpl->inputPort.getName());
+        }
+    }
 }
 
 // data are read from the port and saved in buffer variables

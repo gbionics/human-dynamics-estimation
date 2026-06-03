@@ -13,6 +13,7 @@
 
 const std::string ClientName = "HumanState_nwc_yarp";
 const std::string LogPrefix = ClientName + " :";
+constexpr double LOG_PORT_DISCONNECTED_INTERVAL_S = 5.0;
 
 using namespace hde::devices;
 
@@ -27,6 +28,7 @@ public:
     yarp::os::Network network;
     yarp::os::BufferedPort<trintrin::msgs::HumanState> inputPort;
     bool terminationCall = false;
+    std::string humanStateDataPortName;
 
     // Buffer HumanState variables
     std::vector<std::string> jointNames;
@@ -70,7 +72,7 @@ bool HumanState_nwc_yarp::open(yarp::os::Searchable& config)
     // PARSE THE CONFIGURATION OPTIONS
     // ===============================
 
-    std::string humanStateDataPortName = config.find("humanStateDataPort").asString();
+    pImpl->humanStateDataPortName = config.find("humanStateDataPort").asString();
 
     // Initialize the network
     // TODO: is this required in every DeviceDriver?
@@ -87,7 +89,7 @@ bool HumanState_nwc_yarp::open(yarp::os::Searchable& config)
 
     pImpl->inputPort.useCallback(*this);
     if (!pImpl->inputPort.open("...")) {
-        yError() << LogPrefix << "Failed to open port" << humanStateDataPortName;
+        yError() << LogPrefix << "Failed to open port" << pImpl->humanStateDataPortName;
         return false;
     }
 
@@ -97,9 +99,9 @@ bool HumanState_nwc_yarp::open(yarp::os::Searchable& config)
     yDebug() << LogPrefix << "Opening input ports";
 
 
-    if (!yarp::os::Network::connect(humanStateDataPortName,
+    if (!yarp::os::Network::connect(pImpl->humanStateDataPortName,
                                     pImpl->inputPort.getName())) {
-        yError() << LogPrefix << "Failed to connect " << humanStateDataPortName
+        yError() << LogPrefix << "Failed to connect " << pImpl->humanStateDataPortName
                  << " with " << pImpl->inputPort.getName();
         return false;
     }
@@ -127,7 +129,18 @@ bool HumanState_nwc_yarp::close()
 
 void HumanState_nwc_yarp::run()
 {
-    return;
+    if (pImpl->terminationCall) {
+        return;
+    }
+
+    if (pImpl->inputPort.getInputCount() == 0) {
+        yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
+            << LogPrefix << "No connection to" << pImpl->humanStateDataPortName
+            << "- attempting to reconnect";
+        if (yarp::os::Network::exists(pImpl->humanStateDataPortName)) {
+            yarp::os::Network::connect(pImpl->humanStateDataPortName, pImpl->inputPort.getName());
+        }
+    }
 }
 
 void HumanState_nwc_yarp::onRead(trintrin::msgs::HumanState& humanStateData)

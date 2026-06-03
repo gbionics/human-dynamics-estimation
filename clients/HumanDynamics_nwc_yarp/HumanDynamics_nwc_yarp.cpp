@@ -13,6 +13,7 @@
 
 const std::string ClientName = "HumanDynamics_nwc_yarp";
 const std::string LogPrefix = ClientName + " :";
+constexpr double LOG_PORT_DISCONNECTED_INTERVAL_S = 5.0;
 
 using namespace hde::devices;
 
@@ -27,6 +28,7 @@ public:
     yarp::os::Network network;
     yarp::os::BufferedPort<trintrin::msgs::HumanDynamics> inputPort;
     bool terminationCall = false;
+    std::string humanDynamicsDataPortName;
 
     // Buffer HumanDynamics variables
     std::vector<std::string> jointNames;
@@ -62,7 +64,7 @@ bool HumanDynamics_nwc_yarp::open(yarp::os::Searchable& config)
     // PARSE THE CONFIGURATION OPTIONS
     // ===============================
 
-    std::string humanDynamicsDataPortName = config.find("humanDynamicsDataPort").asString();
+    pImpl->humanDynamicsDataPortName = config.find("humanDynamicsDataPort").asString();
 
     // Initialize the network
     // TODO: is this required in every DeviceDriver?
@@ -79,7 +81,7 @@ bool HumanDynamics_nwc_yarp::open(yarp::os::Searchable& config)
 
     pImpl->inputPort.useCallback(*this);
     if (!pImpl->inputPort.open("...")) {
-        yError() << LogPrefix << "Failed to open port" << humanDynamicsDataPortName;
+        yError() << LogPrefix << "Failed to open port" << pImpl->humanDynamicsDataPortName;
         return false;
     }
 
@@ -89,9 +91,9 @@ bool HumanDynamics_nwc_yarp::open(yarp::os::Searchable& config)
     yDebug() << LogPrefix << "Opening input ports";
 
 
-    if (!yarp::os::Network::connect(humanDynamicsDataPortName,
+    if (!yarp::os::Network::connect(pImpl->humanDynamicsDataPortName,
                                     pImpl->inputPort.getName())) {
-        yError() << LogPrefix << "Failed to connect " << humanDynamicsDataPortName
+        yError() << LogPrefix << "Failed to connect " << pImpl->humanDynamicsDataPortName
                  << " with " << pImpl->inputPort.getName();
         return false;
     }
@@ -119,7 +121,18 @@ bool HumanDynamics_nwc_yarp::close()
 
 void HumanDynamics_nwc_yarp::run()
 {
-    return;
+    if (pImpl->terminationCall) {
+        return;
+    }
+
+    if (pImpl->inputPort.getInputCount() == 0) {
+        yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
+            << LogPrefix << "No connection to" << pImpl->humanDynamicsDataPortName
+            << "- attempting to reconnect";
+        if (yarp::os::Network::exists(pImpl->humanDynamicsDataPortName)) {
+            yarp::os::Network::connect(pImpl->humanDynamicsDataPortName, pImpl->inputPort.getName());
+        }
+    }
 }
 
 // data are read from the port and saved in buffer variables
