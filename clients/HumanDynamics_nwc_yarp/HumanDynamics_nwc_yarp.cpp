@@ -8,6 +8,8 @@
 #include <yarp/os/Network.h>
 #include <yarp/os/LogStream.h>
 
+#include <ConnectionMonitor.h>
+
 #include <iostream>
 #include <mutex>
 
@@ -29,6 +31,7 @@ public:
     yarp::os::BufferedPort<trintrin::msgs::HumanDynamics> inputPort;
     bool terminationCall = false;
     std::string humanDynamicsDataPortName;
+    hde::ConnectionMonitor connectionMonitor;
 
     // Buffer HumanDynamics variables
     std::vector<std::string> jointNames;
@@ -85,6 +88,8 @@ bool HumanDynamics_nwc_yarp::open(yarp::os::Searchable& config)
         return false;
     }
 
+    pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+
     // ================
     // OPEN INPUT PORTS
     // ================
@@ -125,18 +130,12 @@ void HumanDynamics_nwc_yarp::run()
         return;
     }
 
-    if (pImpl->inputPort.getInputCount() == 0) {
+    if (!pImpl->connectionMonitor.isConnected()) {
         yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
-            << LogPrefix << "No connection to" << pImpl->humanDynamicsDataPortName
+            << LogPrefix << "Disconnected from" << pImpl->humanDynamicsDataPortName
             << "- attempting to reconnect";
-        if (yarp::os::Network::exists(pImpl->humanDynamicsDataPortName)) {
-            if (yarp::os::Network::connect(pImpl->humanDynamicsDataPortName, pImpl->inputPort.getName())) {
-                yInfo() << LogPrefix << "Successfully reconnected to" << pImpl->humanDynamicsDataPortName;
-            }
-            else {
-                yWarning() << LogPrefix << "Failed to reconnect to" << pImpl->humanDynamicsDataPortName;
-            }
-        }
+        yarp::os::Network::connect(pImpl->humanDynamicsDataPortName,
+                                   pImpl->inputPort.getName());
     }
 }
 

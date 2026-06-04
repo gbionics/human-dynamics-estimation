@@ -8,6 +8,8 @@
 #include <yarp/os/Network.h>
 #include <yarp/os/LogStream.h>
 
+#include <ConnectionMonitor.h>
+
 #include <unordered_map>
 #include <iostream>
 
@@ -64,6 +66,7 @@ public:
     yarp::os::BufferedPort<trintrin::msgs::WearableTargets> inputPort;
     bool terminationCall = false;
     std::string wearableTargetsDataPortName;
+    hde::ConnectionMonitor connectionMonitor;
 
     mutable std::recursive_mutex mutex;
 
@@ -119,6 +122,8 @@ bool WearableTargets_nwc_yarp::open(yarp::os::Searchable& config)
         return false;
     }
 
+    pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+
     // ================
     // OPEN INPUT PORTS
     // ================
@@ -159,18 +164,12 @@ void WearableTargets_nwc_yarp::run()
         return;
     }
 
-    if (pImpl->inputPort.getInputCount() == 0) {
+    if (!pImpl->connectionMonitor.isConnected()) {
         yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
-            << LogPrefix << "No connection to" << pImpl->wearableTargetsDataPortName
+            << LogPrefix << "Disconnected from" << pImpl->wearableTargetsDataPortName
             << "- attempting to reconnect";
-        if (yarp::os::Network::exists(pImpl->wearableTargetsDataPortName)) {
-            if (yarp::os::Network::connect(pImpl->wearableTargetsDataPortName, pImpl->inputPort.getName())) {
-                yInfo() << LogPrefix << "Successfully reconnected to" << pImpl->wearableTargetsDataPortName;
-            }
-            else {
-                yWarning() << LogPrefix << "Failed to reconnect to" << pImpl->wearableTargetsDataPortName;
-            }
-        }
+        yarp::os::Network::connect(pImpl->wearableTargetsDataPortName,
+                                   pImpl->inputPort.getName());
     }
 }
 
