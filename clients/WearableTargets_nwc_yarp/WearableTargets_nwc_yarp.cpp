@@ -164,7 +164,12 @@ void WearableTargets_nwc_yarp::run()
             << LogPrefix << "No connection to" << pImpl->wearableTargetsDataPortName
             << "- attempting to reconnect";
         if (yarp::os::Network::exists(pImpl->wearableTargetsDataPortName)) {
-            yarp::os::Network::connect(pImpl->wearableTargetsDataPortName, pImpl->inputPort.getName());
+            if (yarp::os::Network::connect(pImpl->wearableTargetsDataPortName, pImpl->inputPort.getName())) {
+                yInfo() << LogPrefix << "Successfully reconnected to" << pImpl->wearableTargetsDataPortName;
+            }
+            else {
+                yWarning() << LogPrefix << "Failed to reconnect to" << pImpl->wearableTargetsDataPortName;
+            }
         }
     }
 }

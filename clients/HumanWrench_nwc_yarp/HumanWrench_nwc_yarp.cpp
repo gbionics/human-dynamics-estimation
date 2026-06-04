@@ -130,7 +130,12 @@ void HumanWrench_nwc_yarp::run()
             << LogPrefix << "No connection to" << pImpl->humanWrenchDataPortName
             << "- attempting to reconnect";
         if (yarp::os::Network::exists(pImpl->humanWrenchDataPortName)) {
-            yarp::os::Network::connect(pImpl->humanWrenchDataPortName, pImpl->inputPort.getName());
+            if (yarp::os::Network::connect(pImpl->humanWrenchDataPortName, pImpl->inputPort.getName())) {
+                yInfo() << LogPrefix << "Successfully reconnected to" << pImpl->humanWrenchDataPortName;
+            }
+            else {
+                yWarning() << LogPrefix << "Failed to reconnect to" << pImpl->humanWrenchDataPortName;
+            }
         }
     }
 }

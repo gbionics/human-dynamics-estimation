@@ -130,7 +130,12 @@ void HumanDynamics_nwc_yarp::run()
             << LogPrefix << "No connection to" << pImpl->humanDynamicsDataPortName
             << "- attempting to reconnect";
         if (yarp::os::Network::exists(pImpl->humanDynamicsDataPortName)) {
-            yarp::os::Network::connect(pImpl->humanDynamicsDataPortName, pImpl->inputPort.getName());
+            if (yarp::os::Network::connect(pImpl->humanDynamicsDataPortName, pImpl->inputPort.getName())) {
+                yInfo() << LogPrefix << "Successfully reconnected to" << pImpl->humanDynamicsDataPortName;
+            }
+            else {
+                yWarning() << LogPrefix << "Failed to reconnect to" << pImpl->humanDynamicsDataPortName;
+            }
         }
     }
 }
