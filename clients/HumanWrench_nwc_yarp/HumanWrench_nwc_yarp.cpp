@@ -30,6 +30,7 @@ public:
     yarp::os::Network network;
     yarp::os::BufferedPort<trintrin::msgs::HumanWrench> inputPort;
     bool terminationCall = false;
+    bool autoReconnect = false;
     std::string humanWrenchDataPortName;
     hde::ConnectionMonitor connectionMonitor;
 
@@ -68,6 +69,7 @@ bool HumanWrench_nwc_yarp::open(yarp::os::Searchable& config)
     // ===============================
 
     pImpl->humanWrenchDataPortName = config.find("humanWrenchDataPort").asString();
+    pImpl->autoReconnect = config.check("autoReconnect", yarp::os::Value(false)).asBool();
 
     // Initialize the network
     // TODO: is this required in every DeviceDriver?
@@ -88,7 +90,9 @@ bool HumanWrench_nwc_yarp::open(yarp::os::Searchable& config)
         return false;
     }
 
-    pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+    if (pImpl->autoReconnect) {
+        pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+    }
 
     // ================
     // OPEN INPUT PORTS
@@ -130,7 +134,7 @@ void HumanWrench_nwc_yarp::run()
         return;
     }
 
-    if (!pImpl->connectionMonitor.isConnected()) {
+    if (pImpl->autoReconnect && !pImpl->connectionMonitor.isConnected()) {
         yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
             << LogPrefix << "Disconnected from" << pImpl->humanWrenchDataPortName
             << "- attempting to reconnect";

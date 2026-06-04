@@ -65,6 +65,7 @@ public:
     yarp::os::Network network;
     yarp::os::BufferedPort<trintrin::msgs::WearableTargets> inputPort;
     bool terminationCall = false;
+    bool autoReconnect = false;
     std::string wearableTargetsDataPortName;
     hde::ConnectionMonitor connectionMonitor;
 
@@ -102,6 +103,7 @@ bool WearableTargets_nwc_yarp::open(yarp::os::Searchable& config)
     // ===============================
 
     pImpl->wearableTargetsDataPortName = config.find("wearableTargetsDataPort").asString();
+    pImpl->autoReconnect = config.check("autoReconnect", yarp::os::Value(false)).asBool();
 
     // Initialize the network
     // TODO: is this required in every DeviceDriver?
@@ -122,7 +124,9 @@ bool WearableTargets_nwc_yarp::open(yarp::os::Searchable& config)
         return false;
     }
 
-    pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+    if (pImpl->autoReconnect) {
+        pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+    }
 
     // ================
     // OPEN INPUT PORTS
@@ -164,7 +168,7 @@ void WearableTargets_nwc_yarp::run()
         return;
     }
 
-    if (!pImpl->connectionMonitor.isConnected()) {
+    if (pImpl->autoReconnect && !pImpl->connectionMonitor.isConnected()) {
         yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
             << LogPrefix << "Disconnected from" << pImpl->wearableTargetsDataPortName
             << "- attempting to reconnect";

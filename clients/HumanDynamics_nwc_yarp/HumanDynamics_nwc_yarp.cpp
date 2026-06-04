@@ -30,6 +30,7 @@ public:
     yarp::os::Network network;
     yarp::os::BufferedPort<trintrin::msgs::HumanDynamics> inputPort;
     bool terminationCall = false;
+    bool autoReconnect = false;
     std::string humanDynamicsDataPortName;
     hde::ConnectionMonitor connectionMonitor;
 
@@ -68,6 +69,7 @@ bool HumanDynamics_nwc_yarp::open(yarp::os::Searchable& config)
     // ===============================
 
     pImpl->humanDynamicsDataPortName = config.find("humanDynamicsDataPort").asString();
+    pImpl->autoReconnect = config.check("autoReconnect", yarp::os::Value(false)).asBool();
 
     // Initialize the network
     // TODO: is this required in every DeviceDriver?
@@ -88,7 +90,9 @@ bool HumanDynamics_nwc_yarp::open(yarp::os::Searchable& config)
         return false;
     }
 
-    pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+    if (pImpl->autoReconnect) {
+        pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+    }
 
     // ================
     // OPEN INPUT PORTS
@@ -130,7 +134,7 @@ void HumanDynamics_nwc_yarp::run()
         return;
     }
 
-    if (!pImpl->connectionMonitor.isConnected()) {
+    if (pImpl->autoReconnect && !pImpl->connectionMonitor.isConnected()) {
         yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
             << LogPrefix << "Disconnected from" << pImpl->humanDynamicsDataPortName
             << "- attempting to reconnect";

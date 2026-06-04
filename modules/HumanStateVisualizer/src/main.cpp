@@ -507,9 +507,12 @@ int main(int argc, char* argv[])
     yarp::dev::PolyDriver humanStateClientDevice;
     hde::interfaces::IHumanState* iHumanState{nullptr};
 
+    bool autoReconnect = rf.check("autoReconnect", yarp::os::Value(false)).asBool();
+
     yarp::os::Property clientOptions;
     clientOptions.put("device", "human_state_nwc_yarp");
     clientOptions.put("humanStateDataPort", humanStateDataPortName);
+    clientOptions.put("autoReconnect", autoReconnect);
 
     if(!humanStateClientDevice.open(clientOptions))
     {
@@ -562,6 +565,7 @@ int main(int argc, char* argv[])
         yarp::os::Property wearableTargetsClientOptions;
         wearableTargetsClientOptions.put("device", "wearable_targets_nwc_yarp");
         wearableTargetsClientOptions.put("wearableTargetsDataPort", wearableTargetsServerPortName);
+        wearableTargetsClientOptions.put("autoReconnect", autoReconnect);
         std::cerr << "my server port name is: "  << wearableTargetsServerPortName << std::endl;
 
         if(!wearableTargetsClientDevice.open(wearableTargetsClientOptions))
@@ -618,6 +622,7 @@ int main(int argc, char* argv[])
         yarp::os::Property humanWrenchClientOptions;
         humanWrenchClientOptions.put("device", "human_wrench_nwc_yarp");
         humanWrenchClientOptions.put("humanWrenchDataPort", humanWrenchServerPortName);
+        humanWrenchClientOptions.put("autoReconnect", autoReconnect);
 
         if(!humanWrenchClientDevice.open(humanWrenchClientOptions))
         {
@@ -655,6 +660,7 @@ int main(int argc, char* argv[])
         yarp::os::Property humanDynamicsClientOptions;
         humanDynamicsClientOptions.put("device", "human_dynamics_nwc_yarp");
         humanDynamicsClientOptions.put("humanDynamicsDataPort", humanDynamicsDataPortName);
+        humanDynamicsClientOptions.put("autoReconnect", autoReconnect);
 
         if (!humanDynamicsClientDevice.open(humanDynamicsClientOptions))
         {
