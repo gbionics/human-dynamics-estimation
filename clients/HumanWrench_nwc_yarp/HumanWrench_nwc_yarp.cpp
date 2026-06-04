@@ -8,6 +8,8 @@
 #include <yarp/os/Network.h>
 #include <yarp/os/LogStream.h>
 
+#include <ConnectionMonitor.h>
+
 #include <iostream>
 #include <mutex>
 
@@ -29,6 +31,7 @@ public:
     yarp::os::BufferedPort<trintrin::msgs::HumanWrench> inputPort;
     bool terminationCall = false;
     std::string humanWrenchDataPortName;
+    hde::ConnectionMonitor connectionMonitor;
 
     // Buffer HumanWrench variables
     std::vector<std::string> wrenchSourceNames;
@@ -85,6 +88,8 @@ bool HumanWrench_nwc_yarp::open(yarp::os::Searchable& config)
         return false;
     }
 
+    pImpl->inputPort.setReporter(pImpl->connectionMonitor);
+
     // ================
     // OPEN INPUT PORTS
     // ================
@@ -125,18 +130,12 @@ void HumanWrench_nwc_yarp::run()
         return;
     }
 
-    if (pImpl->inputPort.getInputCount() == 0) {
+    if (!pImpl->connectionMonitor.isConnected()) {
         yWarningThrottle(LOG_PORT_DISCONNECTED_INTERVAL_S)
-            << LogPrefix << "No connection to" << pImpl->humanWrenchDataPortName
+            << LogPrefix << "Disconnected from" << pImpl->humanWrenchDataPortName
             << "- attempting to reconnect";
-        if (yarp::os::Network::exists(pImpl->humanWrenchDataPortName)) {
-            if (yarp::os::Network::connect(pImpl->humanWrenchDataPortName, pImpl->inputPort.getName())) {
-                yInfo() << LogPrefix << "Successfully reconnected to" << pImpl->humanWrenchDataPortName;
-            }
-            else {
-                yWarning() << LogPrefix << "Failed to reconnect to" << pImpl->humanWrenchDataPortName;
-            }
-        }
+        yarp::os::Network::connect(pImpl->humanWrenchDataPortName,
+                                   pImpl->inputPort.getName());
     }
 }
 
