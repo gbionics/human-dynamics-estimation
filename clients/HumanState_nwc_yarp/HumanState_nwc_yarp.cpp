@@ -138,7 +138,12 @@ void HumanState_nwc_yarp::run()
             << LogPrefix << "No connection to" << pImpl->humanStateDataPortName
             << "- attempting to reconnect";
         if (yarp::os::Network::exists(pImpl->humanStateDataPortName)) {
-            yarp::os::Network::connect(pImpl->humanStateDataPortName, pImpl->inputPort.getName());
+            if (yarp::os::Network::connect(pImpl->humanStateDataPortName, pImpl->inputPort.getName())) {
+                yInfo() << LogPrefix << "Successfully reconnected to" << pImpl->humanStateDataPortName;
+            }
+            else {
+                yWarning() << LogPrefix << "Failed to reconnect to" << pImpl->humanStateDataPortName;
+            }
         }
     }
 }
