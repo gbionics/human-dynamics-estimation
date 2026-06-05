@@ -147,6 +147,17 @@ int main(int argc, char* argv[])
     }
     visualizeEfforts = rf.find("visualizeEfforts").asBool();
 
+    bool visualizeModel;
+    if( !(rf.check("visualizeModel") && rf.find("visualizeModel").isBool()) )
+    {
+        yWarning() << LogPrefix << "'visualizeModel' option not found or not valid. It is set to True.";
+        visualizeModel = true;
+    }
+    else
+    {
+        visualizeModel = rf.find("visualizeModel").asBool();
+    }
+
     bool setBackgroundColor = true;
     iDynTree::Vector4 backgroundColorVector;
     if (!(rf.check("colorBackground") && rf.find("colorBackground").isList()
@@ -731,8 +742,12 @@ int main(int argc, char* argv[])
     viz.setColorPalette("meshcat");
 
     viz.camera().animator()->enableMouseControl(true);
-    
+
     viz.addModel(model, "human");
+    if (!visualizeModel)
+    {
+        viz.modelViz("human").setModelVisibility(false);
+    }
 
     if (setBackgroundColor)
     {
