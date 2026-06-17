@@ -5,6 +5,10 @@ if(ENABLE_FrameVisualizer)
     add_subdirectory(IWearFrameVisualizer)
 endif()
 
+if(ENABLE_ForceTorqueVisualizer)
+    add_subdirectory(IWearForceTorqueVisualizer)
+endif()
+
 if(HUMANSTATEPROVIDER_ENABLE_VISUALIZER)
     add_subdirectory(HumanStateVisualizer)
 endif()
