@@ -36,6 +36,8 @@ struct JointEffortData
     double effort;
 };
 
+using VizIndex = int;
+
 void my_handler(int signal)
 {
     isClosing = true;
@@ -568,16 +570,15 @@ int main(int argc, char* argv[])
     }
 
     // initialize iWearableTargets interface from client
-    std::unordered_map<hde::TargetName, std::shared_ptr<hde::WearableSensorTarget>> targets;
+    // targets are resolved lazily at runtime as data arrives
+    std::unordered_map<hde::TargetName, std::pair<std::shared_ptr<hde::WearableSensorTarget>, VizIndex>> targets;
+    hde::interfaces::IWearableTargets* iWearableTargets{nullptr};
     yarp::dev::PolyDriver wearableTargetsClientDevice;
     if (visualizeTargets) {
-        hde::interfaces::IWearableTargets* iWearableTargets{nullptr};
-
         yarp::os::Property wearableTargetsClientOptions;
         wearableTargetsClientOptions.put("device", "wearable_targets_nwc_yarp");
         wearableTargetsClientOptions.put("wearableTargetsDataPort", wearableTargetsServerPortName);
         wearableTargetsClientOptions.put("autoReconnect", autoReconnect);
-        std::cerr << "my server port name is: "  << wearableTargetsServerPortName << std::endl;
 
         if(!wearableTargetsClientDevice.open(wearableTargetsClientOptions))
         {
@@ -588,40 +589,6 @@ int main(int argc, char* argv[])
         {
             yError() << LogPrefix << "Failed to view iWearableTargets interface";
             return EXIT_FAILURE;
-        }
-
-        // wait for the iWearableTargets to be initialized
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        while (iWearableTargets->getAllTargetsName().empty())
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            yInfo() << LogPrefix << "Waiting for data from WearableTargetsClient";
-        }
-
-        // Verify the selected targets exist, and that the associated link exists in the visualized model
-        // and create a vector with the targets
-        auto targetsName = iWearableTargets->getAllTargetsName();
-        for (auto visualizedTargetFrame : visualizedTargetsFrame)
-        {
-            auto target = iWearableTargets->getTarget(visualizedTargetFrame);
-
-            // check if target exists
-            if (!target)
-            {
-                yWarning() << LogPrefix << "target [ " << visualizedTargetFrame << " ] not found in iWearableTargets. Skipping." ;
-                continue;
-            }
-
-            // check if frame exists
-            auto frameIndex = model.getLinkIndex(target.get()->modelLinkName);
-            if (frameIndex == iDynTree::FRAME_INVALID_INDEX)
-            {
-                yWarning() << LogPrefix << "target link [ " << target.get()->modelLinkName << " ] not found in the visualized model. Skipping.";
-                continue;
-            }
-
-            // add the target to the vector
-            targets.emplace(visualizedTargetFrame, target);
         }
     }
 
@@ -778,30 +745,9 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (visualizeTargets)
-    {
-        for (auto targetEntity : targets)
-        {
-            if ( targetEntity.second.get()->targetType == hde::KinematicTargetType::pose ||
-                 targetEntity.second.get()->targetType == hde::KinematicTargetType::poseAndVelocity ||
-                 targetEntity.second.get()->targetType == hde::KinematicTargetType::position ||
-                 targetEntity.second.get()->targetType == hde::KinematicTargetType::positionAndVelocity ||
-                 targetEntity.second.get()->targetType == hde::KinematicTargetType::orientation ||
-                 targetEntity.second.get()->targetType == hde::KinematicTargetType::orientationAndVelocity ||
-                 targetEntity.second.get()->targetType == hde::KinematicTargetType::floorContact)
-            {
-                linkTransform = iDynTree::Transform(targetEntity.second.get()->getCalibratedRotation(), iDynTree::Position(targetEntity.second.get()->getCalibratedPosition()));
-                viz.frames().addFrame(linkTransform, targetsFrameScalingFactor);
-            }
-            if ( targetEntity.second.get()->targetType == hde::KinematicTargetType::gravity )
-            {
-                linkTransform = iDynTree::Transform(targetEntity.second.get()->getCalibratedRotation(), iDynTree::Position(targetEntity.second.get()->getCalibratedPosition()));
-                iDynTree::toEigen(gravityVector) = targetsFrameScalingFactor * iDynTree::toEigen(linkTransform.getRotation()).row(2);
-                viz.vectors().addVector(linkTransform.getPosition(), gravityVector );
-            }
-            
-        }
-    }
+    // Track the next available viz indices for lazily-added target frames/vectors
+    size_t nextTargetFrameVizIndex = visualizeFrames ? visualizedLinksFrame.size() : 0;
+    size_t nextTargetVectorVizIndex = visualizeWrenches ? wrenchSourceLinks.size() : 0;
 
     if (visualizeEfforts)
     {
@@ -870,7 +816,6 @@ int main(int argc, char* argv[])
 
         viz.modelViz("human").setPositions(wHb, joints);
 
-        size_t vectorsIterator = 0;
         if (visualizeWrenches)
         {
             for (size_t vectorIndex = 0; vectorIndex < wrenchSourceLinks.size(); vectorIndex++)
@@ -882,62 +827,85 @@ int main(int argc, char* argv[])
                 }
                 force = linkTransform.getRotation() * force;
                 viz.vectors().updateVector(vectorIndex, linkTransform.getPosition(), force);
-                vectorsIterator++;
             }
         }
 
-        size_t framesIterator = 0;
         if (visualizeFrames)
         {
             for (size_t vectorIndex = 0; vectorIndex < visualizedLinksFrame.size(); vectorIndex++)
             {
                 linkTransform = viz.modelViz("human").getWorldLinkTransform(visualizedLinksFrame.at(vectorIndex));
                 viz.frames().updateFrame(vectorIndex, linkTransform);
-                framesIterator++;
             }
         }
 
-        if (visualizeTargets)
+        if (visualizeTargets && iWearableTargets)
         {
-            for (auto targetEntity : targets)
+            for (const auto& targetName : visualizedTargetsFrame)
             {
-                switch (targetEntity.second.get()->targetType)
-                {
-                case hde::KinematicTargetType::pose: case hde::KinematicTargetType::poseAndVelocity: 
-                    linkTransform = iDynTree::Transform(targetEntity.second.get()->getCalibratedRotation(), iDynTree::Position(targetEntity.second.get()->getCalibratedPosition()));
-                    viz.frames().updateFrame(framesIterator, linkTransform);
-                    framesIterator++;
-                    break;
-                case hde::KinematicTargetType::position: case hde::KinematicTargetType::positionAndVelocity:
-                    linkTransform = viz.modelViz("human").getWorldLinkTransform(targetEntity.second.get()->modelLinkName);
-                    linkTransform.setPosition(iDynTree::Position(targetEntity.second.get()->getCalibratedPosition()));
-                    viz.frames().updateFrame(framesIterator, linkTransform);
-                    framesIterator++;
-                    break;
-                case hde::KinematicTargetType::orientation: case hde::KinematicTargetType::orientationAndVelocity:
-                    linkTransform = viz.modelViz("human").getWorldLinkTransform(targetEntity.second.get()->modelLinkName);
-                    linkTransform.setRotation(targetEntity.second.get()->getCalibratedRotation());
-                    viz.frames().updateFrame(framesIterator, linkTransform);
-                    framesIterator++;
-                    break;
-                case hde::KinematicTargetType::gravity:
-                    linkTransform = viz.modelViz("human").getWorldLinkTransform(targetEntity.second.get()->modelLinkName);
-                    iDynTree::toEigen(gravityVector) = targetsFrameScalingFactor * (iDynTree::toEigen(linkTransform.getRotation()) * iDynTree::toEigen(targetEntity.second.get()->getCalibratedRotation()).row(2).transpose());
-                    viz.vectors().updateVector(vectorsIterator, linkTransform.getPosition(), gravityVector);
-                    vectorsIterator++;
-                    break;
-                case hde::KinematicTargetType::floorContact:
-                    linkTransform = iDynTree::Transform(targetEntity.second.get()->getCalibratedRotation(), iDynTree::Position(targetEntity.second.get()->getCalibratedPosition()));
-                    linkTransform.setPosition(iDynTree::Position(linkTransform.getPosition().getVal(0), linkTransform.getPosition().getVal(1), linkTransform.getPosition().getVal(2)));
+                auto target = iWearableTargets->getTarget(targetName);
+                if (!target) continue;
 
-        
-                    viz.frames().updateFrame(framesIterator, linkTransform);
-                    framesIterator++;
-                    break;
-                default:
-                    linkTransform = viz.modelViz("human").getWorldLinkTransform(targetEntity.second.get()->modelLinkName);
-                    viz.frames().updateFrame(framesIterator, linkTransform);
-                    framesIterator++;
+                auto it = targets.find(targetName);
+                if (it == targets.end())
+                {
+                    // First time this target arrives: validate model link
+                    if (model.getLinkIndex(target->modelLinkName) == iDynTree::FRAME_INVALID_INDEX)
+                    {
+                        yWarning() << LogPrefix << "target link [ " << target->modelLinkName << " ] not found in the visualized model. Skipping.";
+                        continue;
+                    }
+                    // Add to visualizer and record the assigned index
+                    VizIndex vizIdx;
+                    if (target->targetType == hde::KinematicTargetType::gravity)
+                    {
+                        linkTransform = viz.modelViz("human").getWorldLinkTransform(target->modelLinkName);
+                        iDynTree::toEigen(gravityVector) = targetsFrameScalingFactor * (iDynTree::toEigen(linkTransform.getRotation()) * iDynTree::toEigen(target->getCalibratedRotation()).row(2).transpose());
+                        vizIdx = nextTargetVectorVizIndex++;
+                        viz.vectors().addVector(linkTransform.getPosition(), gravityVector);
+                    }
+                    else
+                    {
+                        linkTransform = iDynTree::Transform(target->getCalibratedRotation(), iDynTree::Position(target->getCalibratedPosition()));
+                        vizIdx = nextTargetFrameVizIndex++;
+                        viz.frames().addFrame(linkTransform, targetsFrameScalingFactor);
+                    }
+                    targets.emplace(targetName, std::make_pair(target, vizIdx));
+                }
+                else
+                {
+                    // Already registered: update
+                    VizIndex vizIdx = it->second.second;
+                    switch (target->targetType)
+                    {
+                    case hde::KinematicTargetType::pose: case hde::KinematicTargetType::poseAndVelocity:
+                        linkTransform = iDynTree::Transform(target->getCalibratedRotation(), iDynTree::Position(target->getCalibratedPosition()));
+                        viz.frames().updateFrame(vizIdx, linkTransform);
+                        break;
+                    case hde::KinematicTargetType::position: case hde::KinematicTargetType::positionAndVelocity:
+                        linkTransform = viz.modelViz("human").getWorldLinkTransform(target->modelLinkName);
+                        linkTransform.setPosition(iDynTree::Position(target->getCalibratedPosition()));
+                        viz.frames().updateFrame(vizIdx, linkTransform);
+                        break;
+                    case hde::KinematicTargetType::orientation: case hde::KinematicTargetType::orientationAndVelocity:
+                        linkTransform = viz.modelViz("human").getWorldLinkTransform(target->modelLinkName);
+                        linkTransform.setRotation(target->getCalibratedRotation());
+                        viz.frames().updateFrame(vizIdx, linkTransform);
+                        break;
+                    case hde::KinematicTargetType::gravity:
+                        linkTransform = viz.modelViz("human").getWorldLinkTransform(target->modelLinkName);
+                        iDynTree::toEigen(gravityVector) = targetsFrameScalingFactor * (iDynTree::toEigen(linkTransform.getRotation()) * iDynTree::toEigen(target->getCalibratedRotation()).row(2).transpose());
+                        viz.vectors().updateVector(vizIdx, linkTransform.getPosition(), gravityVector);
+                        break;
+                    case hde::KinematicTargetType::floorContact:
+                        linkTransform = iDynTree::Transform(target->getCalibratedRotation(), iDynTree::Position(target->getCalibratedPosition()));
+                        viz.frames().updateFrame(vizIdx, linkTransform);
+                        break;
+                    default:
+                        linkTransform = viz.modelViz("human").getWorldLinkTransform(target->modelLinkName);
+                        viz.frames().updateFrame(vizIdx, linkTransform);
+                        break;
+                    }
                 }
             }
         }
