@@ -21,6 +21,8 @@ endif()
 include(GNUInstallDirs)
 include(CTest)
 
+option(HUMANSTATEPROVIDER_ENABLE_YARP "Enable the YARP dependent devices, wrappers, modules, servers, clients and libraries. If OFF, only the YARP-independent components (such as the interfaces) are built and installed" ON)
+
 option(HUMANSTATEPROVIDER_ENABLE_VISUALIZER "Enable the iDyntree-irricht based Human State Visualizer" OFF)
 
 find_package(robometry QUIET)
@@ -30,9 +32,12 @@ option(BUILD_TESTING "Build tests" OFF)
 
 # Find packages needed for this main CMakeLists.txt.
 # Subfolders will find the dependencies they need.
-find_package(YARP 3.2 REQUIRED)
 find_package(YCM REQUIRED)
-find_package(trintrin REQUIRED)
+
+if(HUMANSTATEPROVIDER_ENABLE_YARP)
+    find_package(YARP 3.2 REQUIRED)
+    find_package(trintrin REQUIRED)
+endif()
 
 # Import cmake utilities
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -47,9 +52,6 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 option(BUILD_SHARED_LIBS "Build libraries as shared as opposed to static" ON)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-# Plugins are force to be Shared/Dynamic Library
-set(YARP_FORCE_DYNAMIC_PLUGINS ON)
 
 # Control where binaries and libraries are placed in the build folder.
 # This simplifies tests running in Windows.
@@ -110,25 +112,33 @@ include(AddUninstallTarget)
 # ===================
 include(InstallBasicPackageFiles)
 
-yarp_configure_plugins_installation(hde)
-add_subdirectory(conf)
-add_subdirectory(msgs)
 add_subdirectory(interfaces)
 add_subdirectory(impl)
-add_subdirectory(devices)
-add_subdirectory(wrappers)
-add_subdirectory(app)
-add_subdirectory(modules)
-add_subdirectory(servers)
-add_subdirectory(clients)
-add_subdirectory(HumanDynamicsEstimationLibrary)
 
-install_basic_package_files(${PROJECT_NAME}
-  VERSION ${${PROJECT_NAME}_VERSION}
-  COMPATIBILITY AnyNewerVersion
-  VARS_PREFIX ${PROJECT_NAME}
-  NO_CHECK_REQUIRED_COMPONENTS_MACRO
-  DEPENDENCIES YARP trintrin)
+if(HUMANSTATEPROVIDER_ENABLE_YARP)
+    # YARP plugins are force to be Shared/Dynamic Library
+    set(YARP_FORCE_DYNAMIC_PLUGINS ON)
+    yarp_configure_plugins_installation(hde)
+    add_subdirectory(conf)
+    add_subdirectory(app)
+    add_subdirectory(msgs)
+    add_subdirectory(devices)
+    add_subdirectory(wrappers)
+    add_subdirectory(modules)
+    add_subdirectory(servers)
+    add_subdirectory(clients)
+    add_subdirectory(HumanDynamicsEstimationLibrary)
+
+    # HumanDynamicsEstimationLibrary is the only component installed into the
+    # ${PROJECT_NAME} export set, so the package config can only be generated
+    # when it is built.
+    install_basic_package_files(${PROJECT_NAME}
+      VERSION ${${PROJECT_NAME}_VERSION}
+      COMPATIBILITY AnyNewerVersion
+      VARS_PREFIX ${PROJECT_NAME}
+      NO_CHECK_REQUIRED_COMPONENTS_MACRO
+      DEPENDENCIES YARP trintrin)
+endif()
 
 # Add the uninstall target
 include(AddUninstallTarget)
