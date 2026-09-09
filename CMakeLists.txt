@@ -23,11 +23,6 @@ include(CTest)
 
 option(HUMANSTATEPROVIDER_ENABLE_YARP "Enable the YARP dependent devices, wrappers, modules, servers, clients and libraries. If OFF, only the YARP-independent components (such as the interfaces) are built and installed" ON)
 
-option(HUMANSTATEPROVIDER_ENABLE_VISUALIZER "Enable the iDyntree-irricht based Human State Visualizer" OFF)
-
-find_package(robometry QUIET)
-option(HUMANSTATEPROVIDER_ENABLE_LOGGER "Enable the robometry based Human Logger" ${robometry_FOUND})
-
 option(BUILD_TESTING "Build tests" OFF)
 
 # Find packages needed for this main CMakeLists.txt.
@@ -37,6 +32,32 @@ find_package(YCM REQUIRED)
 if(HUMANSTATEPROVIDER_ENABLE_YARP)
     find_package(YARP 3.2 REQUIRED)
     find_package(trintrin REQUIRED)
+
+    option(HUMANSTATEPROVIDER_ENABLE_VISUALIZER "Enable the iDyntree-irricht based Human State Visualizer" OFF)
+
+    find_package(robometry QUIET)
+    option(HUMANSTATEPROVIDER_ENABLE_LOGGER "Enable the robometry based Human Logger" ${robometry_FOUND})
+
+    # Flag to enable XSensSuit wearable device
+    find_package(XsensXME QUIET)
+    option(ENABLE_XsensSuit "Flag that enables building XsensSuit wearable device" ${XsensXME_FOUND})
+    if(ENABLE_XsensSuit)
+        add_subdirectory(XSensMVN)
+    endif()
+
+    # Flag to enable Paexo wearable device
+    option(ENABLE_Paexo "Flag that enables building Paexo wearable device" OFF)
+
+    # Flag to enable IWearFrameVisualizer module
+    find_package(iDynTree QUIET)
+    option(ENABLE_FrameVisualizer "Flag that enables building IWearFrameVisualizer module" ${iDynTree_FOUND})
+
+    # Flag to enable IWearLogger device
+    find_package(robometry QUIET)
+    option(ENABLE_Logger "Flag that enables building Wearable Logger device" ${robometry_FOUND})
+
+    # Flag to enable ICub wearable device
+    option(ENABLE_ICub "Flag that enables building iCub wearable device" ${iDynTree_FOUND})
 endif()
 
 # Import cmake utilities
@@ -81,28 +102,6 @@ if(WIN32)
   #Add compile definition to suppress warning related to header <experimental/filesystem>
   add_compile_definitions(_SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING)
 endif()
-
-# Flag to enable XSensSuit wearable device
-find_package(XsensXME QUIET)
-option(ENABLE_XsensSuit "Flag that enables building XsensSuit wearable device" ${XsensXME_FOUND})
-if(ENABLE_XsensSuit)
-  add_subdirectory(XSensMVN)
-endif()
-
-# Flag to enable Paexo wearable device
-option(ENABLE_Paexo "Flag that enables building Paexo wearable device" OFF)
-
-# Flag to enable IWearFrameVisualizer module
-find_package(iDynTree QUIET)
-option(ENABLE_FrameVisualizer "Flag that enables building IWearFrameVisualizer module" ${iDynTree_FOUND})
-
-# Flag to enable IWearLogger device
-find_package(robometry QUIET)
-option(ENABLE_Logger "Flag that enables building Wearable Logger device" ${robometry_FOUND})
-
-# Flag to enable ICub wearable device
-option(ENABLE_ICub "Flag that enables building iCub wearable device" ${iDynTree_FOUND})
-
 
 # Add the uninstall target
 include(AddUninstallTarget)
