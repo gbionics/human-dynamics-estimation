@@ -41,9 +41,6 @@ if(HUMANSTATEPROVIDER_ENABLE_YARP)
     # Flag to enable XSensSuit wearable device
     find_package(XsensXME QUIET)
     option(ENABLE_XsensSuit "Flag that enables building XsensSuit wearable device" ${XsensXME_FOUND})
-    if(ENABLE_XsensSuit)
-        add_subdirectory(XSensMVN)
-    endif()
 
     # Flag to enable Paexo wearable device
     option(ENABLE_Paexo "Flag that enables building Paexo wearable device" OFF)
@@ -127,6 +124,10 @@ if(HUMANSTATEPROVIDER_ENABLE_YARP)
     add_subdirectory(servers)
     add_subdirectory(clients)
     add_subdirectory(HumanDynamicsEstimationLibrary)
+
+    if(ENABLE_XsensSuit)
+        add_subdirectory(XSensMVN)
+    endif()
 
     # HumanDynamicsEstimationLibrary is the only component installed into the
     # ${PROJECT_NAME} export set, so the package config can only be generated
