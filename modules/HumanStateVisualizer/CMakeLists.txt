@@ -39,6 +39,7 @@ target_link_libraries(${EXE_TARGET_NAME} LINK_PUBLIC
   iDynTree::idyntree-modelio
   iDynTree::idyntree-visualization
   IHumanState
+  IHumanStateHorizon
   IWearableTargets
   IHumanWrench
   IHumanDynamics)

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include <hde/interfaces/IHumanState.h>
+#include <hde/interfaces/IHumanStateHorizon.h>
 #include <hde/interfaces/IHumanWrench.h>
 #include <hde/interfaces/IWearableTargets.h>
 #include <hde/interfaces/IHumanDynamics.h>
@@ -231,12 +232,61 @@ int main(int argc, char* argv[])
     }
     unsigned int maxVisualizationFPS = rf.find("maxVisualizationFPS").asInt32();
 
-    if( !(rf.check("humanStateDataPortName") && rf.find("humanStateDataPortName").isString()) ) 
+    // Select the human state source: either the classical IHumanState or a single index of the
+    // IHumanStateHorizon.
+    bool useStateHorizon = rf.check("useStateHorizon", yarp::os::Value(false)).asBool();
+
+    size_t horizonIndex = 0;
+    bool visualizeAllHorizonSteps = false;
+    double horizonStepsMinTransparency = 0.1;
+    std::string humanStateDataPortName;
+    if (useStateHorizon)
     {
-        yError() << LogPrefix << "'humanStateDataPortName' option not found or not valid.";
-        return EXIT_FAILURE;
+        if( !(rf.check("humanStateHorizonDataPortName") && rf.find("humanStateHorizonDataPortName").isString()) )
+        {
+            yError() << LogPrefix << "'humanStateHorizonDataPortName' option not found or not valid.";
+            return EXIT_FAILURE;
+        }
+        humanStateDataPortName = rf.find("humanStateHorizonDataPortName").asString();
+
+        if (rf.check("horizonIndex"))
+        {
+            if (!(rf.find("horizonIndex").isInt32() && rf.find("horizonIndex").asInt32() >= 0))
+            {
+                yError() << LogPrefix << "'horizonIndex' option not valid. It must be a non-negative integer.";
+                return EXIT_FAILURE;
+            }
+            horizonIndex = static_cast<size_t>(rf.find("horizonIndex").asInt32());
+        }
+
+        // When enabled, all the horizon steps are visualized as separate models with a crescendo of
+        // transparency.
+        visualizeAllHorizonSteps = rf.check("visualizeAllHorizonSteps", yarp::os::Value(false)).asBool();
+        if (visualizeAllHorizonSteps)
+        {
+            horizonIndex = 0; // the main model represents the first horizon step
+            if (rf.check("horizonStepsMinTransparency"))
+            {
+                if (!(rf.find("horizonStepsMinTransparency").isFloat64()
+                      && rf.find("horizonStepsMinTransparency").asFloat64() >= 0.0
+                      && rf.find("horizonStepsMinTransparency").asFloat64() <= 1.0))
+                {
+                    yError() << LogPrefix << "'horizonStepsMinTransparency' option not valid. It must be a number in [0.0, 1.0].";
+                    return EXIT_FAILURE;
+                }
+                horizonStepsMinTransparency = rf.find("horizonStepsMinTransparency").asFloat64();
+            }
+        }
     }
-    std::string humanStateDataPortName = rf.find("humanStateDataPortName").asString();
+    else
+    {
+        if( !(rf.check("humanStateDataPortName") && rf.find("humanStateDataPortName").isString()) )
+        {
+            yError() << LogPrefix << "'humanStateDataPortName' option not found or not valid.";
+            return EXIT_FAILURE;
+        }
+        humanStateDataPortName = rf.find("humanStateDataPortName").asString();
+    }
 
     // Visualize Wrenches Options
     std::string humanWrenchServerPortName;
@@ -514,15 +564,26 @@ int main(int argc, char* argv[])
     }
 
 
-    // initialize iHumanState interface from client
+    // initialize the human state interface from client. Depending on the configuration, the data
+    // is read either from the classical IHumanState or from a single index of the
+    // IHumanStateHorizon.
     yarp::dev::PolyDriver humanStateClientDevice;
     hde::interfaces::IHumanState* iHumanState{nullptr};
+    hde::interfaces::IHumanStateHorizon* iHumanStateHorizon{nullptr};
 
     bool autoReconnect = rf.check("autoReconnect", yarp::os::Value(false)).asBool();
 
     yarp::os::Property clientOptions;
-    clientOptions.put("device", "human_state_nwc_yarp");
-    clientOptions.put("humanStateDataPort", humanStateDataPortName);
+    if (useStateHorizon)
+    {
+        clientOptions.put("device", "human_state_horizon_nwc_yarp");
+        clientOptions.put("humanStateHorizonDataPort", humanStateDataPortName);
+    }
+    else
+    {
+        clientOptions.put("device", "human_state_nwc_yarp");
+        clientOptions.put("humanStateDataPort", humanStateDataPortName);
+    }
     clientOptions.put("autoReconnect", autoReconnect);
 
     if(!humanStateClientDevice.open(clientOptions))
@@ -530,29 +591,71 @@ int main(int argc, char* argv[])
         yError() << LogPrefix << "Failed to connect client device (iHumanState)";
         return EXIT_FAILURE;
     }
-    if(!humanStateClientDevice.view(iHumanState) || !iHumanState )
+    if (useStateHorizon)
     {
-        yError() << LogPrefix << "Failed to view iHumanState interface";
-        return EXIT_FAILURE;
+        if(!humanStateClientDevice.view(iHumanStateHorizon) || !iHumanStateHorizon )
+        {
+            yError() << LogPrefix << "Failed to view iHumanStateHorizon interface";
+            return EXIT_FAILURE;
+        }
+    }
+    else
+    {
+        if(!humanStateClientDevice.view(iHumanState) || !iHumanState )
+        {
+            yError() << LogPrefix << "Failed to view iHumanState interface";
+            return EXIT_FAILURE;
+        }
     }
 
-    // wait for the iHumanState to be initialized
-    while (iHumanState->getBaseName().empty())
+    // Accessors abstracting the selected human state source (classical vs. horizon). The horizon
+    // step is passed explicitly; for the classical source it is ignored. Pass horizonIndex to get
+    // the default sample.
+    auto getBaseName = [&](size_t step) {
+        return useStateHorizon ? iHumanStateHorizon->getBaseName(step) : iHumanState->getBaseName();
+    };
+    auto getJointNames = [&](size_t step) {
+        return useStateHorizon ? iHumanStateHorizon->getJointNames(step) : iHumanState->getJointNames();
+    };
+    auto getBasePosition = [&](size_t step) {
+        return useStateHorizon ? iHumanStateHorizon->getBasePosition(step) : iHumanState->getBasePosition();
+    };
+    auto getBaseOrientation = [&](size_t step) {
+        return useStateHorizon ? iHumanStateHorizon->getBaseOrientation(step) : iHumanState->getBaseOrientation();
+    };
+    auto getJointPositions = [&](size_t step) {
+        return useStateHorizon ? iHumanStateHorizon->getJointPositions(step) : iHumanState->getJointPositions();
+    };
+
+    if (useStateHorizon)
     {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        yInfo() << LogPrefix << "Waiting for data from HumanStateClient";
+        // wait for the horizon to contain the requested index
+        while (iHumanStateHorizon->getNumberOfSamples() <= horizonIndex || getBaseName(horizonIndex).empty())
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            yInfo() << LogPrefix << "Waiting for data from HumanStateHorizonClient";
+        }
     }
-     
-    // compare the iHumanState base and joint names with the visualization model
-    yInfo() << LogPrefix << "Human State Interface providing data for the base link [ " << iHumanState->getBaseName() << " ]";
-    if ( iHumanState->getBaseName() != model.getLinkName(model.getDefaultBaseLink()))
+    else
     {
-        model.setDefaultBaseLink(model.getLinkIndex(iHumanState->getBaseName()));
-        yInfo() << LogPrefix << "Default base link of the visualized model is changed to " << iHumanState->getBaseName();
+        // wait for the iHumanState to be initialized
+        while (getBaseName(horizonIndex).empty())
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            yInfo() << LogPrefix << "Waiting for data from HumanStateClient";
+        }
     }
-    yInfo() << LogPrefix << "Human State Interface providing data from [ " << iHumanState->getJointNames().size() << " ] joints";
+
+    // compare the human state base and joint names with the visualization model
+    yInfo() << LogPrefix << "Human State Interface providing data for the base link [ " << getBaseName(horizonIndex) << " ]";
+    if ( getBaseName(horizonIndex) != model.getLinkName(model.getDefaultBaseLink()))
+    {
+        model.setDefaultBaseLink(model.getLinkIndex(getBaseName(horizonIndex)));
+        yInfo() << LogPrefix << "Default base link of the visualized model is changed to " << getBaseName(horizonIndex);
+    }
+    yInfo() << LogPrefix << "Human State Interface providing data from [ " << getJointNames(horizonIndex).size() << " ] joints";
     
-    for (auto jointName : iHumanState->getJointNames())
+    for (auto jointName : getJointNames(horizonIndex))
     {
         if (model.getJointIndex(jointName) == iDynTree::JOINT_INVALID_INDEX)
         {
@@ -749,6 +852,37 @@ int main(int argc, char* argv[])
         viz.modelViz("human").setModelVisibility(false);
     }
 
+    // When visualizing all the horizon steps, add one extra model per step (beyond the first one,
+    // which is the main "human" model) with a crescendo of transparency.
+    size_t numberOfHorizonSteps = 1;
+    std::vector<std::string> horizonModelInstances;
+    if (visualizeAllHorizonSteps)
+    {
+        numberOfHorizonSteps = iHumanStateHorizon->getNumberOfSamples();
+        for (size_t step = 1; step < numberOfHorizonSteps; step++)
+        {
+            const std::string instanceName = "human_" + std::to_string(step);
+            viz.addModel(model, instanceName);
+            horizonModelInstances.push_back(instanceName);
+
+            if (!visualizeModel)
+            {
+                viz.modelViz(instanceName).setModelVisibility(false);
+            }
+
+            // transparency = 1.0 (opaque) for the first step, decreasing linearly down to
+            // horizonStepsMinTransparency for the last step.
+            double transparency = 1.0;
+            if (numberOfHorizonSteps > 1)
+            {
+                transparency = 1.0
+                    - (1.0 - horizonStepsMinTransparency)
+                          * (static_cast<double>(step) / static_cast<double>(numberOfHorizonSteps - 1));
+            }
+            viz.modelViz(instanceName).setModelTransparency(transparency);
+        }
+    }
+
     if (setBackgroundColor)
     {
         iDynTree::ColorViz colorBackground(backgroundColorVector);
@@ -838,11 +972,11 @@ int main(int argc, char* argv[])
             continue;
         }
 
-        // read values from iHumanState
-        basePositionInterface = iHumanState->getBasePosition();
-        baseOrientationInterface = iHumanState->getBaseOrientation();
-        jointPositionsInterface = iHumanState->getJointPositions();
-        jointNames = iHumanState->getJointNames();
+        // read values from the selected human state source
+        basePositionInterface = getBasePosition(horizonIndex);
+        baseOrientationInterface = getBaseOrientation(horizonIndex);
+        jointPositionsInterface = getJointPositions(horizonIndex);
+        jointNames = getJointNames(horizonIndex);
 
         baseOrientationQuaternion.setVal(0, baseOrientationInterface.at(0));
         baseOrientationQuaternion.setVal(1, baseOrientationInterface.at(1));
@@ -869,6 +1003,53 @@ int main(int argc, char* argv[])
         }
 
         viz.modelViz("human").setPositions(wHb, joints);
+
+        // update the additional models associated to the remaining horizon steps
+        if (visualizeAllHorizonSteps)
+        {
+            size_t availableSteps = iHumanStateHorizon->getNumberOfSamples();
+            for (size_t step = 1; step < numberOfHorizonSteps; step++)
+            {
+                const std::string& instanceName = horizonModelInstances.at(step - 1);
+                if (step >= availableSteps)
+                {
+                    viz.modelViz(instanceName).setModelVisibility(false);
+                    continue;
+                }
+                if (visualizeModel)
+                {
+                    viz.modelViz(instanceName).setModelVisibility(true);
+                }
+
+                auto stepBasePosition = getBasePosition(step);
+                auto stepBaseOrientation = getBaseOrientation(step);
+                auto stepJointPositions = getJointPositions(step);
+                auto stepJointNames = getJointNames(step);
+
+                iDynTree::Vector4 stepBaseOrientationQuaternion;
+                stepBaseOrientationQuaternion.setVal(0, stepBaseOrientation.at(0));
+                stepBaseOrientationQuaternion.setVal(1, stepBaseOrientation.at(1));
+                stepBaseOrientationQuaternion.setVal(2, stepBaseOrientation.at(2));
+                stepBaseOrientationQuaternion.setVal(3, stepBaseOrientation.at(3));
+
+                iDynTree::Transform stepWHb = iDynTree::Transform::Identity();
+                stepWHb.setRotation(iDynTree::Rotation::RotationFromQuaternion(stepBaseOrientationQuaternion));
+                stepWHb.setPosition(iDynTree::Position(stepBasePosition.at(0), stepBasePosition.at(1), stepBasePosition.at(2)));
+
+                iDynTree::VectorDynSize stepJoints(model.getNrOfDOFs());
+                stepJoints.zero();
+                for (size_t idx = 0; idx < stepJointNames.size(); idx++)
+                {
+                    iDynTree::JointIndex jointIndex = viz.modelViz(instanceName).model().getJointIndex(stepJointNames.at(idx));
+                    if (jointIndex != iDynTree::JOINT_INVALID_INDEX)
+                    {
+                        stepJoints.setVal(jointIndex, stepJointPositions.at(idx));
+                    }
+                }
+
+                viz.modelViz(instanceName).setPositions(stepWHb, stepJoints);
+            }
+        }
 
         size_t vectorsIterator = 0;
         if (visualizeWrenches)
