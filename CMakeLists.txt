@@ -31,7 +31,7 @@ find_package(YCM REQUIRED)
 
 if(HUMANSTATEPROVIDER_ENABLE_YARP)
     find_package(YARP 3.2 REQUIRED)
-    find_package(trintrin REQUIRED)
+    find_package(trintrin 0.2.0 REQUIRED)
 
     option(HUMANSTATEPROVIDER_ENABLE_VISUALIZER "Enable the iDyntree-irricht based Human State Visualizer" OFF)
 
