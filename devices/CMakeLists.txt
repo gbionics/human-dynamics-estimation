@@ -27,4 +27,5 @@ add_subdirectory(RobotPositionController)
 
 if(HUMANSTATEPROVIDER_ENABLE_LOGGER)
     add_subdirectory(HumanLogger)
+    add_subdirectory(HumanStateReplayer)
 endif()

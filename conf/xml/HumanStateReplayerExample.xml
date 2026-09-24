@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE robot PUBLIC "-//YARP//DTD yarprobotinterface 3.0//EN" "http://www.yarp.it/DTD/yarprobotinterfaceV3.0.dtd">
+<robot name="HumanStateReplayer" build=0 portprefix="">
+
+    <!--
+        HumanStateReplayer streams data from a HumanLogger .mat file.
+
+        The device:
+          - Opens outputPort to publish HumanState data directly
+          - Opens outputPort/rpc:i for RPC commands (start / pause / reset)
+          - Implements IHumanState so it can optionally be wrapped by human_state_nws_yarp
+
+        Usage (standalone, data published directly on outputPort):
+          yarprobotinterface - -config HumanStateReplayerExample.xml
+          yarp rpc /HDE/HumanStateReplayer/rpc:i
+          >> start
+          >> pause
+          >> reset
+    -->
+
+    <device type="human_state_replayer" name="HumanStateReplayerDevice">
+        <!-- Path to the .mat file saved by HumanLogger -->
+        <param name="matFile">/path/to/experiment.mat</param>
+
+        <!-- Output port for streaming HumanState data -->
+        <param name="outputPort">/HDE/HumanStateReplayer/state:o</param>
+        <!-- RPC port is automatically: /HDE/HumanStateReplayer/state:o/rpc:i -->
+
+        <!-- Name of the floating base link (not stored in the .mat file) -->
+        <param name="baseName">Pelvis</param>
+
+        <!-- Playback speed multiplier: 1.0 = real-time, 2.0 = double speed -->
+        <param name="speedMultiplier">1.0</param>
+
+        <!-- Whether to loop back to frame 0 at end of dataset -->
+        <param name="loop">false</param>
+
+        <!-- Optional: explicit period in seconds (overrides value inferred from timestamps) -->
+        <!-- <param name="period">0.01</param> -->
+    </device>
+
+</robot>
+
