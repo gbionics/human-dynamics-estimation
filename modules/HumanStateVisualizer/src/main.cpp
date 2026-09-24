@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include <hde/interfaces/IHumanState.h>
+#include <hde/interfaces/IHumanStateHorizon.h>
 #include <hde/interfaces/IHumanWrench.h>
 #include <hde/interfaces/IWearableTargets.h>
 #include <hde/interfaces/IHumanDynamics.h>
@@ -231,12 +232,40 @@ int main(int argc, char* argv[])
     }
     unsigned int maxVisualizationFPS = rf.find("maxVisualizationFPS").asInt32();
 
-    if( !(rf.check("humanStateDataPortName") && rf.find("humanStateDataPortName").isString()) ) 
+    // Select the human state source: either the classical IHumanState or a single index of the
+    // IHumanStateHorizon.
+    bool useStateHorizon = rf.check("useStateHorizon", yarp::os::Value(false)).asBool();
+
+    size_t horizonIndex = 0;
+    std::string humanStateDataPortName;
+    if (useStateHorizon)
     {
-        yError() << LogPrefix << "'humanStateDataPortName' option not found or not valid.";
-        return EXIT_FAILURE;
+        if( !(rf.check("humanStateHorizonDataPortName") && rf.find("humanStateHorizonDataPortName").isString()) )
+        {
+            yError() << LogPrefix << "'humanStateHorizonDataPortName' option not found or not valid.";
+            return EXIT_FAILURE;
+        }
+        humanStateDataPortName = rf.find("humanStateHorizonDataPortName").asString();
+
+        if (rf.check("horizonIndex"))
+        {
+            if (!(rf.find("horizonIndex").isInt32() && rf.find("horizonIndex").asInt32() >= 0))
+            {
+                yError() << LogPrefix << "'horizonIndex' option not valid. It must be a non-negative integer.";
+                return EXIT_FAILURE;
+            }
+            horizonIndex = static_cast<size_t>(rf.find("horizonIndex").asInt32());
+        }
     }
-    std::string humanStateDataPortName = rf.find("humanStateDataPortName").asString();
+    else
+    {
+        if( !(rf.check("humanStateDataPortName") && rf.find("humanStateDataPortName").isString()) )
+        {
+            yError() << LogPrefix << "'humanStateDataPortName' option not found or not valid.";
+            return EXIT_FAILURE;
+        }
+        humanStateDataPortName = rf.find("humanStateDataPortName").asString();
+    }
 
     // Visualize Wrenches Options
     std::string humanWrenchServerPortName;
@@ -514,15 +543,26 @@ int main(int argc, char* argv[])
     }
 
 
-    // initialize iHumanState interface from client
+    // initialize the human state interface from client. Depending on the configuration, the data
+    // is read either from the classical IHumanState or from a single index of the
+    // IHumanStateHorizon.
     yarp::dev::PolyDriver humanStateClientDevice;
     hde::interfaces::IHumanState* iHumanState{nullptr};
+    hde::interfaces::IHumanStateHorizon* iHumanStateHorizon{nullptr};
 
     bool autoReconnect = rf.check("autoReconnect", yarp::os::Value(false)).asBool();
 
     yarp::os::Property clientOptions;
-    clientOptions.put("device", "human_state_nwc_yarp");
-    clientOptions.put("humanStateDataPort", humanStateDataPortName);
+    if (useStateHorizon)
+    {
+        clientOptions.put("device", "human_state_horizon_nwc_yarp");
+        clientOptions.put("humanStateHorizonDataPort", humanStateDataPortName);
+    }
+    else
+    {
+        clientOptions.put("device", "human_state_nwc_yarp");
+        clientOptions.put("humanStateDataPort", humanStateDataPortName);
+    }
     clientOptions.put("autoReconnect", autoReconnect);
 
     if(!humanStateClientDevice.open(clientOptions))
@@ -530,29 +570,69 @@ int main(int argc, char* argv[])
         yError() << LogPrefix << "Failed to connect client device (iHumanState)";
         return EXIT_FAILURE;
     }
-    if(!humanStateClientDevice.view(iHumanState) || !iHumanState )
+    if (useStateHorizon)
     {
-        yError() << LogPrefix << "Failed to view iHumanState interface";
-        return EXIT_FAILURE;
+        if(!humanStateClientDevice.view(iHumanStateHorizon) || !iHumanStateHorizon )
+        {
+            yError() << LogPrefix << "Failed to view iHumanStateHorizon interface";
+            return EXIT_FAILURE;
+        }
+    }
+    else
+    {
+        if(!humanStateClientDevice.view(iHumanState) || !iHumanState )
+        {
+            yError() << LogPrefix << "Failed to view iHumanState interface";
+            return EXIT_FAILURE;
+        }
     }
 
-    // wait for the iHumanState to be initialized
-    while (iHumanState->getBaseName().empty())
+    // Accessors abstracting the selected human state source (classical vs. horizon index).
+    auto getBaseName = [&]() {
+        return useStateHorizon ? iHumanStateHorizon->getBaseName(horizonIndex) : iHumanState->getBaseName();
+    };
+    auto getJointNames = [&]() {
+        return useStateHorizon ? iHumanStateHorizon->getJointNames(horizonIndex) : iHumanState->getJointNames();
+    };
+    auto getBasePosition = [&]() {
+        return useStateHorizon ? iHumanStateHorizon->getBasePosition(horizonIndex) : iHumanState->getBasePosition();
+    };
+    auto getBaseOrientation = [&]() {
+        return useStateHorizon ? iHumanStateHorizon->getBaseOrientation(horizonIndex) : iHumanState->getBaseOrientation();
+    };
+    auto getJointPositions = [&]() {
+        return useStateHorizon ? iHumanStateHorizon->getJointPositions(horizonIndex) : iHumanState->getJointPositions();
+    };
+
+    if (useStateHorizon)
     {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        yInfo() << LogPrefix << "Waiting for data from HumanStateClient";
+        // wait for the horizon to contain the requested index
+        while (iHumanStateHorizon->getNumberOfSamples() <= horizonIndex || getBaseName().empty())
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            yInfo() << LogPrefix << "Waiting for data from HumanStateHorizonClient";
+        }
     }
-     
-    // compare the iHumanState base and joint names with the visualization model
-    yInfo() << LogPrefix << "Human State Interface providing data for the base link [ " << iHumanState->getBaseName() << " ]";
-    if ( iHumanState->getBaseName() != model.getLinkName(model.getDefaultBaseLink()))
+    else
     {
-        model.setDefaultBaseLink(model.getLinkIndex(iHumanState->getBaseName()));
-        yInfo() << LogPrefix << "Default base link of the visualized model is changed to " << iHumanState->getBaseName();
+        // wait for the iHumanState to be initialized
+        while (getBaseName().empty())
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            yInfo() << LogPrefix << "Waiting for data from HumanStateClient";
+        }
     }
-    yInfo() << LogPrefix << "Human State Interface providing data from [ " << iHumanState->getJointNames().size() << " ] joints";
+
+    // compare the human state base and joint names with the visualization model
+    yInfo() << LogPrefix << "Human State Interface providing data for the base link [ " << getBaseName() << " ]";
+    if ( getBaseName() != model.getLinkName(model.getDefaultBaseLink()))
+    {
+        model.setDefaultBaseLink(model.getLinkIndex(getBaseName()));
+        yInfo() << LogPrefix << "Default base link of the visualized model is changed to " << getBaseName();
+    }
+    yInfo() << LogPrefix << "Human State Interface providing data from [ " << getJointNames().size() << " ] joints";
     
-    for (auto jointName : iHumanState->getJointNames())
+    for (auto jointName : getJointNames())
     {
         if (model.getJointIndex(jointName) == iDynTree::JOINT_INVALID_INDEX)
         {
@@ -838,11 +918,11 @@ int main(int argc, char* argv[])
             continue;
         }
 
-        // read values from iHumanState
-        basePositionInterface = iHumanState->getBasePosition();
-        baseOrientationInterface = iHumanState->getBaseOrientation();
-        jointPositionsInterface = iHumanState->getJointPositions();
-        jointNames = iHumanState->getJointNames();
+        // read values from the selected human state source
+        basePositionInterface = getBasePosition();
+        baseOrientationInterface = getBaseOrientation();
+        jointPositionsInterface = getJointPositions();
+        jointNames = getJointNames();
 
         baseOrientationQuaternion.setVal(0, baseOrientationInterface.at(0));
         baseOrientationQuaternion.setVal(1, baseOrientationInterface.at(1));
