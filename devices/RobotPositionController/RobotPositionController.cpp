@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "RobotPositionController.h"
+#include <hde/algorithms/MinJerkTrajGen.hpp>
 #include <hde/interfaces/IHumanState.h>
 
 #include <array>
 #include <numeric>
 #include <chrono>
 #include <cmath>
+#include <memory>
 
 #include <thread>
 
@@ -15,9 +17,6 @@
 #include <yarp/os/ResourceFinder.h>
 #include <yarp/dev/PolyDriver.h>
 #include <yarp/dev/ControlBoardInterfaces.h>
-#include <yarp/sig/Vector.h>
-
-#include <iCub/ctrl/minJerkCtrl.h>
 
 const std::string DeviceName = "RobotPositionController";
 const std::string LogPrefix = DeviceName + " :";
@@ -56,9 +55,8 @@ public:
     double initialSmoothingTime;
     int initialSmoothingCount;
     int maxSmoothingCount;
-    yarp::sig::Vector posDirectRefJointPosVector;
-    yarp::sig::Vector posDirectInputJointPosVector;
-    std::vector<iCub::ctrl::minJerkTrajGen*> minJerkTrajGeneratorVec;
+    std::vector<Eigen::VectorXd> posDirectRefJointPosVector;
+    std::vector<std::unique_ptr<hde::algorithms::minJerkTrajGen>> minJerkTrajGeneratorVec;
 
     std::vector<std::string> jointNameListFromConfigControlBoards;
     std::vector<std::string> jointNameListFromHumanState;
@@ -187,6 +185,7 @@ bool RobotPositionController::open(yarp::os::Searchable& config)
     pImpl->remoteControlBoards.resize(controlBoards.size());
     pImpl->nJointsVectorFromConfig.resize(controlBoards.size());
     pImpl->minJerkTrajGeneratorVec.resize(controlBoards.size());
+    pImpl->posDirectRefJointPosVector.resize(controlBoards.size());
 
     // Open the control boards
     size_t boardCount = 0;
@@ -299,19 +298,15 @@ bool RobotPositionController::open(yarp::os::Searchable& config)
                 }
             }
 
-            yarp::sig::Vector initEncoderJointPositionsVector;
-            initEncoderJointPositionsVector.resize(remoteControlBoardJoints);
-            initEncoderJointPositionsVector.zero();
-
-            for(int k = 0; k < remoteControlBoardJoints; k++) {
-                initEncoderJointPositionsVector[k] = initEncoderJointPositions[k];
-            }
-
             // Initialize min jerk object pointer
-            pImpl->minJerkTrajGeneratorVec.at(boardCount) = new iCub::ctrl::minJerkTrajGen(remoteControlBoardJoints, pImpl->samplingTime, pImpl->initialSmoothingTime);
+            pImpl->minJerkTrajGeneratorVec.at(boardCount) =
+                std::make_unique<hde::algorithms::minJerkTrajGen>(
+                    remoteControlBoardJoints, pImpl->samplingTime, pImpl->initialSmoothingTime);
+            pImpl->posDirectRefJointPosVector.at(boardCount).resize(remoteControlBoardJoints);
 
             // Set min jerk object initial values
-            pImpl->minJerkTrajGeneratorVec.at(boardCount)->init(initEncoderJointPositionsVector);
+            pImpl->minJerkTrajGeneratorVec.at(boardCount)->init(
+                Eigen::Map<const Eigen::VectorXd>(initEncoderJointPositions.data(), remoteControlBoardJoints));
         }
 
 
@@ -392,14 +387,6 @@ void RobotPositionController::run()
 
             if (pImpl->controlMode == "positionDirect") {
                 pImpl->remoteControlBoards.at(boardCount)->view(pImpl->iPosDirectControl);
-
-                // Set the size of references joint positions vector
-                pImpl->posDirectRefJointPosVector.resize(joints);
-                //pImpl->posDirectRefJointPosVector.zero();
-
-                // Set the size of input joint positions vector
-                pImpl->posDirectInputJointPosVector.resize(joints);
-                //pImpl->posDirectRefJointPosVector.zero();
             }
 
             for (int j = 0; j < joints; j++) {
@@ -413,11 +400,11 @@ void RobotPositionController::run()
 
                 if (pImpl->controlMode == "positionDirect") {
                     if (j < pImpl->nJointsVectorFromConfig.at(boardCount))  {
-                        pImpl->posDirectRefJointPosVector[j] = pImpl->desiredJointPositionVector.at(jointNumber);
+                        pImpl->posDirectRefJointPosVector.at(boardCount)[j] = pImpl->desiredJointPositionVector.at(jointNumber);
                         jointNumber++;
                     }
                     else {
-                        pImpl->posDirectRefJointPosVector[j] = pImpl->encodersJointPositionsVector.at(j);
+                        pImpl->posDirectRefJointPosVector.at(boardCount)[j] = pImpl->encodersJointPositionsVector.at(j);
                     }
                 }
             }
@@ -438,9 +425,10 @@ void RobotPositionController::run()
                     pImpl->minJerkTrajGeneratorVec.at(boardCount)->setT(pImpl->smoothingTime);
                 }
 
-                pImpl->minJerkTrajGeneratorVec.at(boardCount)->computeNextValues(pImpl->posDirectRefJointPosVector);
-                pImpl->posDirectInputJointPosVector = pImpl->minJerkTrajGeneratorVec.at(boardCount)->getPos();
-                pImpl->iPosDirectControl->setPositions(pImpl->posDirectInputJointPosVector.data());
+                pImpl->minJerkTrajGeneratorVec.at(boardCount)->computeNextValues(
+                    pImpl->posDirectRefJointPosVector.at(boardCount));
+                pImpl->iPosDirectControl->setPositions(
+                    pImpl->minJerkTrajGeneratorVec.at(boardCount)->getPos().data());
             }
         }
 
