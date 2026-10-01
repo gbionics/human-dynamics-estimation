@@ -9,7 +9,6 @@
 #include <numeric>
 #include <chrono>
 #include <cmath>
-#include <memory>
 
 #include <thread>
 
@@ -56,7 +55,7 @@ public:
     int initialSmoothingCount;
     int maxSmoothingCount;
     std::vector<Eigen::VectorXd> posDirectRefJointPosVector;
-    std::vector<std::unique_ptr<hde::algorithms::minJerkTrajGen>> minJerkTrajGeneratorVec;
+    std::vector<hde::algorithms::MinJerkTrajGen> minJerkTrajGeneratorVec;
 
     std::vector<std::string> jointNameListFromConfigControlBoards;
     std::vector<std::string> jointNameListFromHumanState;
@@ -184,7 +183,7 @@ bool RobotPositionController::open(yarp::os::Searchable& config)
     // Set the size of remote control boards vector
     pImpl->remoteControlBoards.resize(controlBoards.size());
     pImpl->nJointsVectorFromConfig.resize(controlBoards.size());
-    pImpl->minJerkTrajGeneratorVec.resize(controlBoards.size());
+    pImpl->minJerkTrajGeneratorVec.reserve(controlBoards.size());
     pImpl->posDirectRefJointPosVector.resize(controlBoards.size());
 
     // Open the control boards
@@ -298,14 +297,13 @@ bool RobotPositionController::open(yarp::os::Searchable& config)
                 }
             }
 
-            // Initialize min jerk object pointer
-            pImpl->minJerkTrajGeneratorVec.at(boardCount) =
-                std::make_unique<hde::algorithms::minJerkTrajGen>(
-                    remoteControlBoardJoints, pImpl->samplingTime, pImpl->initialSmoothingTime);
+            // Initialize min jerk object
+            pImpl->minJerkTrajGeneratorVec.emplace_back(
+                remoteControlBoardJoints, pImpl->samplingTime, pImpl->initialSmoothingTime);
             pImpl->posDirectRefJointPosVector.at(boardCount).resize(remoteControlBoardJoints);
 
             // Set min jerk object initial values
-            pImpl->minJerkTrajGeneratorVec.at(boardCount)->init(
+            pImpl->minJerkTrajGeneratorVec.at(boardCount).init(
                 Eigen::Map<const Eigen::VectorXd>(initEncoderJointPositions.data(), remoteControlBoardJoints));
         }
 
@@ -417,18 +415,18 @@ void RobotPositionController::run()
                 if (pImpl->initialSmoothingCount < pImpl->maxSmoothingCount)
                 {
                     pImpl->initialSmoothingCount++;
-                    pImpl->minJerkTrajGeneratorVec.at(boardCount)->setT(pImpl->initialSmoothingTime);
+                    pImpl->minJerkTrajGeneratorVec.at(boardCount).setT(pImpl->initialSmoothingTime);
 
                 }
                 else
                 {
-                    pImpl->minJerkTrajGeneratorVec.at(boardCount)->setT(pImpl->smoothingTime);
+                    pImpl->minJerkTrajGeneratorVec.at(boardCount).setT(pImpl->smoothingTime);
                 }
 
-                pImpl->minJerkTrajGeneratorVec.at(boardCount)->computeNextValues(
+                pImpl->minJerkTrajGeneratorVec.at(boardCount).computeNextValues(
                     pImpl->posDirectRefJointPosVector.at(boardCount));
                 pImpl->iPosDirectControl->setPositions(
-                    pImpl->minJerkTrajGeneratorVec.at(boardCount)->getPos().data());
+                    pImpl->minJerkTrajGeneratorVec.at(boardCount).getPos().data());
             }
         }
 

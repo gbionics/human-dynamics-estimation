@@ -15,9 +15,9 @@
 
 #include <cassert>
 
-using hde::algorithms::minJerkTrajGen;
+using hde::algorithms::MinJerkTrajGen;
 
-void minJerkTrajGen::Filter::configure(Eigen::Index dimension,
+void MinJerkTrajGen::Filter::configure(Eigen::Index dimension,
                                        const std::array<double, 4>& numerator,
                                        const std::array<double, 4>& denominator,
                                        const Eigen::VectorXd& initialOutput)
@@ -32,7 +32,7 @@ void minJerkTrajGen::Filter::configure(Eigen::Index dimension,
     initSteady(initialOutput);
 }
 
-void minJerkTrajGen::Filter::adjustCoefficients(
+void MinJerkTrajGen::Filter::adjustCoefficients(
     const std::array<double, 4>& numerator,
     const std::array<double, 4>& denominator) noexcept
 {
@@ -40,7 +40,7 @@ void minJerkTrajGen::Filter::adjustCoefficients(
     m_denominator = denominator;
 }
 
-void minJerkTrajGen::Filter::initSteady(const Eigen::Ref<const Eigen::VectorXd>& output)
+void MinJerkTrajGen::Filter::initSteady(const Eigen::Ref<const Eigen::VectorXd>& output)
 {
     assert(output.size() == m_output.size());
     double numeratorSum = 0.0;
@@ -60,7 +60,7 @@ void minJerkTrajGen::Filter::initSteady(const Eigen::Ref<const Eigen::VectorXd>&
     }
 }
 
-void minJerkTrajGen::Filter::initZero(const Eigen::Ref<const Eigen::VectorXd>& nextInput)
+void MinJerkTrajGen::Filter::initZero(const Eigen::Ref<const Eigen::VectorXd>& nextInput)
 {
     assert(nextInput.size() == m_output.size());
     m_output.setZero();
@@ -72,7 +72,7 @@ void minJerkTrajGen::Filter::initZero(const Eigen::Ref<const Eigen::VectorXd>& n
     }
 }
 
-void minJerkTrajGen::Filter::filter(const Eigen::Ref<const Eigen::VectorXd>& input,
+void MinJerkTrajGen::Filter::filter(const Eigen::Ref<const Eigen::VectorXd>& input,
                                     Eigen::VectorXd& output)
 {
     assert(input.size() == m_output.size());
@@ -108,7 +108,7 @@ void minJerkTrajGen::Filter::filter(const Eigen::Ref<const Eigen::VectorXd>& inp
     }
 }
 
-minJerkTrajGen::minJerkTrajGen(unsigned int dimension,
+MinJerkTrajGen::MinJerkTrajGen(unsigned int dimension,
                                double sampleTime,
                                double trajectoryTime)
     : m_dimension(dimension)
@@ -122,7 +122,7 @@ minJerkTrajGen::minJerkTrajGen(unsigned int dimension,
     computeCoeffs();
 }
 
-minJerkTrajGen::minJerkTrajGen(const Eigen::Ref<const Eigen::VectorXd>& initialValue,
+MinJerkTrajGen::MinJerkTrajGen(const Eigen::Ref<const Eigen::VectorXd>& initialValue,
                                double sampleTime,
                                double trajectoryTime)
     : m_dimension(static_cast<unsigned int>(initialValue.size()))
@@ -136,7 +136,7 @@ minJerkTrajGen::minJerkTrajGen(const Eigen::Ref<const Eigen::VectorXd>& initialV
     computeCoeffs();
 }
 
-minJerkTrajGen::minJerkTrajGen(const minJerkTrajGen& other)
+MinJerkTrajGen::MinJerkTrajGen(const MinJerkTrajGen& other)
     : m_dimension(other.m_dimension)
     , m_sampleTime(other.m_sampleTime)
     , m_trajectoryTime(other.m_trajectoryTime)
@@ -148,7 +148,7 @@ minJerkTrajGen::minJerkTrajGen(const minJerkTrajGen& other)
     computeCoeffs();
 }
 
-minJerkTrajGen& minJerkTrajGen::operator=(const minJerkTrajGen& other)
+MinJerkTrajGen& MinJerkTrajGen::operator=(const MinJerkTrajGen& other)
 {
     if (this != &other) {
         m_dimension = other.m_dimension;
@@ -164,7 +164,7 @@ minJerkTrajGen& minJerkTrajGen::operator=(const minJerkTrajGen& other)
     return *this;
 }
 
-void minJerkTrajGen::init(const Eigen::Ref<const Eigen::VectorXd>& initialValue)
+void MinJerkTrajGen::init(const Eigen::Ref<const Eigen::VectorXd>& initialValue)
 {
     assert(initialValue.size() == static_cast<Eigen::Index>(m_dimension));
     m_lastReference = initialValue;
@@ -174,7 +174,7 @@ void minJerkTrajGen::init(const Eigen::Ref<const Eigen::VectorXd>& initialValue)
     m_accelerationFilter.initZero(initialValue);
 }
 
-void minJerkTrajGen::computeNextValues(const Eigen::Ref<const Eigen::VectorXd>& desiredValue)
+void MinJerkTrajGen::computeNextValues(const Eigen::Ref<const Eigen::VectorXd>& desiredValue)
 {
     assert(desiredValue.size() == static_cast<Eigen::Index>(m_dimension));
     m_lastReference = desiredValue;
@@ -183,13 +183,13 @@ void minJerkTrajGen::computeNextValues(const Eigen::Ref<const Eigen::VectorXd>& 
     m_accelerationFilter.filter(desiredValue, m_acceleration);
 }
 
-const Eigen::VectorXd& minJerkTrajGen::getPos() const noexcept { return m_position; }
-const Eigen::VectorXd& minJerkTrajGen::getVel() const noexcept { return m_velocity; }
-const Eigen::VectorXd& minJerkTrajGen::getAcc() const noexcept { return m_acceleration; }
-double minJerkTrajGen::getT() const noexcept { return m_trajectoryTime; }
-double minJerkTrajGen::getTs() const noexcept { return m_sampleTime; }
+const Eigen::VectorXd& MinJerkTrajGen::getPos() const noexcept { return m_position; }
+const Eigen::VectorXd& MinJerkTrajGen::getVel() const noexcept { return m_velocity; }
+const Eigen::VectorXd& MinJerkTrajGen::getAcc() const noexcept { return m_acceleration; }
+double MinJerkTrajGen::getT() const noexcept { return m_trajectoryTime; }
+double MinJerkTrajGen::getTs() const noexcept { return m_sampleTime; }
 
-bool minJerkTrajGen::setT(double trajectoryTime)
+bool MinJerkTrajGen::setT(double trajectoryTime)
 {
     if (trajectoryTime <= 0.0) {
         return false;
@@ -199,7 +199,7 @@ bool minJerkTrajGen::setT(double trajectoryTime)
     return true;
 }
 
-bool minJerkTrajGen::setTs(double sampleTime)
+bool MinJerkTrajGen::setTs(double sampleTime)
 {
     if (sampleTime <= 0.0) {
         return false;
@@ -209,7 +209,7 @@ bool minJerkTrajGen::setTs(double sampleTime)
     return true;
 }
 
-void minJerkTrajGen::computeCoeffs()
+void MinJerkTrajGen::computeCoeffs()
 {
     // 90% of steady-state value in t=T
     // transient extinguished for t>=1.5*T

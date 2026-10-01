@@ -42,7 +42,7 @@ void requireEqual(const Eigen::VectorXd& actual,
     }
 }
 
-void requireGeneratorsEqual(const hde::algorithms::minJerkTrajGen& actual,
+void requireGeneratorsEqual(const hde::algorithms::MinJerkTrajGen& actual,
                             const iCub::ctrl::minJerkTrajGen& expected,
                             int sample)
 {
@@ -84,7 +84,7 @@ TEST_CASE("Eigen minimum-jerk generator matches iCub over changing references")
             initial[i] = -12.0 + 2.75 * i;
         }
 
-        hde::algorithms::minJerkTrajGen actual(initial,
+        hde::algorithms::MinJerkTrajGen actual(initial,
                                                parameters.sampleTime,
                                                parameters.trajectoryTime);
         iCub::ctrl::minJerkTrajGen expected(toYarp(initial),
@@ -104,7 +104,7 @@ TEST_CASE("Eigen minimum-jerk generator matches iCub over changing references")
 TEST_CASE("Initialization and run-time parameter changes match iCub")
 {
     constexpr unsigned int Dimension = 5;
-    hde::algorithms::minJerkTrajGen actual(Dimension, 0.01, 1.2);
+    hde::algorithms::MinJerkTrajGen actual(Dimension, 0.01, 1.2);
     iCub::ctrl::minJerkTrajGen expected(Dimension, 0.01, 1.2);
 
     Eigen::VectorXd initial(Dimension);
@@ -149,7 +149,7 @@ TEST_CASE("Copy construction and assignment have iCub-compatible reset semantics
 {
     Eigen::VectorXd initial(4);
     initial << 1.0, -2.0, 3.0, -4.0;
-    hde::algorithms::minJerkTrajGen actual(initial, 0.01, 0.8);
+    hde::algorithms::MinJerkTrajGen actual(initial, 0.01, 0.8);
     iCub::ctrl::minJerkTrajGen expected(toYarp(initial), 0.01, 0.8);
 
     for (int sample = 0; sample < 100; ++sample) {
@@ -158,9 +158,9 @@ TEST_CASE("Copy construction and assignment have iCub-compatible reset semantics
         expected.computeNextValues(toYarp(reference));
     }
 
-    hde::algorithms::minJerkTrajGen actualCopy(actual);
+    hde::algorithms::MinJerkTrajGen actualCopy(actual);
     iCub::ctrl::minJerkTrajGen expectedCopy(expected);
-    hde::algorithms::minJerkTrajGen actualAssigned(1, 0.1, 1.0);
+    hde::algorithms::MinJerkTrajGen actualAssigned(1, 0.1, 1.0);
     iCub::ctrl::minJerkTrajGen expectedAssigned(1, 0.1, 1.0);
     actualAssigned = actual;
     expectedAssigned = expected;

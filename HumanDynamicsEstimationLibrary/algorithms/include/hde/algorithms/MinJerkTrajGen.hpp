@@ -29,19 +29,19 @@ namespace hde::algorithms
  * computeNextValues() do not allocate memory when their argument size matches
  * the configured dimension.
  */
-class minJerkTrajGen
+class MinJerkTrajGen
 {
 public:
-    minJerkTrajGen(unsigned int dimension, double sampleTime, double trajectoryTime);
-    minJerkTrajGen(const Eigen::Ref<const Eigen::VectorXd>& initialValue,
+    MinJerkTrajGen(unsigned int dimension, double sampleTime, double trajectoryTime);
+    MinJerkTrajGen(const Eigen::Ref<const Eigen::VectorXd>& initialValue,
                    double sampleTime,
                    double trajectoryTime);
 
-    minJerkTrajGen(const minJerkTrajGen& other);
-    minJerkTrajGen& operator=(const minJerkTrajGen& other);
-    minJerkTrajGen(minJerkTrajGen&&) noexcept = default;
-    minJerkTrajGen& operator=(minJerkTrajGen&&) noexcept = default;
-    ~minJerkTrajGen() = default;
+    MinJerkTrajGen(const MinJerkTrajGen& other);
+    MinJerkTrajGen& operator=(const MinJerkTrajGen& other);
+    MinJerkTrajGen(MinJerkTrajGen&&) noexcept = default;
+    MinJerkTrajGen& operator=(MinJerkTrajGen&&) noexcept = default;
+    ~MinJerkTrajGen() = default;
 
     void init(const Eigen::Ref<const Eigen::VectorXd>& initialValue);
     void computeNextValues(const Eigen::Ref<const Eigen::VectorXd>& desiredValue);
@@ -94,4 +94,3 @@ private:
 } // namespace hde::algorithms
 
 #endif // HDE_ALGORITHMS_MINJERKTRAJGEN_HPP
-
