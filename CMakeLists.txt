@@ -137,7 +137,7 @@ if(HUMANSTATEPROVIDER_ENABLE_YARP)
       COMPATIBILITY AnyNewerVersion
       VARS_PREFIX ${PROJECT_NAME}
       NO_CHECK_REQUIRED_COMPONENTS_MACRO
-      DEPENDENCIES YARP trintrin)
+      DEPENDENCIES YARP trintrin Eigen3)
 endif()
 
 # Add the uninstall target
